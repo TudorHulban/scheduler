@@ -3,12 +3,15 @@ package scheduler
 import (
 	"context"
 	"errors"
+
+	goerrors "github.com/TudorHulban/go-errors"
+	"github.com/asaskevich/govalidator"
 )
 
 type Resource struct {
 	Name string
 
-	schedule        map[[3]int]int    // [3]int is [unix_start_time, unix_end_time, GMT offset], int is task ID
+	schedule        map[[3]int]int    // [3]int is [unix_start_time, unix_end_time, GMT offset]Task ID
 	costPerLoadUnit map[uint8]float32 // load unit | cost per unit
 
 	ID           int
@@ -16,54 +19,28 @@ type Resource struct {
 }
 
 type ParamsNewResource struct {
-	Name            string
-	CostPerLoadUnit map[uint8]float32
-	ResourceType    uint8
+	Name            string            `valid:"required"`
+	CostPerLoadUnit map[uint8]float32 `valid:"required"`
+	ResourceType    uint8             `valid:"required"`
 }
 
-func NewResource(params *ParamsNewResource) *Resource {
-	return &Resource{
-		Name:         params.Name,
-		ResourceType: params.ResourceType,
-
-		costPerLoadUnit: params.CostPerLoadUnit,
-		schedule:        map[[3]int]int{},
-	}
-}
-
-type ParamsTask struct {
-	TimeStart int
-	TimeEnd   int
-	GMTOffset int
-
-	TaskID int
-}
-
-func (res *Resource) RemoveTask(_ context.Context, params *ParamsTask) error {
-	keysToDelete := []([3]int){}
-
-	for interval, taskID := range res.schedule {
-		if taskID == params.TaskID {
-			if params.TimeStart <= interval[0] &&
-				interval[1] <= params.TimeEnd &&
-				interval[2] == params.GMTOffset {
-				keysToDelete = append(
-					keysToDelete,
-					interval,
-				)
+func NewResource(params *ParamsNewResource) (*Resource, error) {
+	if _, errValidation := govalidator.ValidateStruct(params); errValidation != nil {
+		return nil,
+			goerrors.ErrValidation{
+				Caller: "NewResource",
+				Issue:  errValidation,
 			}
-		}
 	}
 
-	if len(keysToDelete) == 0 {
-		return errors.New("no schedules found within the given timeframe")
-	}
+	return &Resource{
+			Name:         params.Name,
+			ResourceType: params.ResourceType,
 
-	for _, keyToDelete := range keysToDelete {
-		delete(res.schedule, keyToDelete)
-	}
-
-	return nil
+			costPerLoadUnit: params.CostPerLoadUnit,
+			schedule:        map[[3]int]int{},
+		},
+		nil
 }
 
 func (res *Resource) isAvailable(timeStart, timeEnd int) [2]int {
@@ -84,6 +61,14 @@ func (res *Resource) isAvailable(timeStart, timeEnd int) [2]int {
 	}
 
 	return [2]int{}
+}
+
+type ParamsTask struct {
+	TimeStart int
+	TimeEnd   int
+	GMTOffset int
+
+	TaskID int
 }
 
 func (res *Resource) AddTask(_ context.Context, params *ParamsTask) ([2]int, error) {
@@ -129,21 +114,46 @@ func (res *Resource) GetTasks(atTimestamp, offset int) [][2]int {
 	return finishedTasks
 }
 
-func (res *Resource) findEarliestAvailableTime(startTime, duration, taskOffset, locationOffset int) int {
-	resourceOffset := 0 // Assuming resource's schedule offset is its local offset
+func (res *Resource) RemoveTask(_ context.Context, params *ParamsTask) error {
+	keysToDelete := []([3]int){}
 
+	for interval, taskID := range res.schedule {
+		if taskID == params.TaskID {
+			if params.TimeStart <= interval[0] &&
+				interval[1] <= params.TimeEnd &&
+				interval[2] == params.GMTOffset {
+				keysToDelete = append(
+					keysToDelete,
+					interval,
+				)
+			}
+		}
+	}
+
+	if len(keysToDelete) == 0 {
+		return errors.New("no schedules found within the given timeframe")
+	}
+
+	for _, keyToDelete := range keysToDelete {
+		delete(res.schedule, keyToDelete)
+	}
+
+	return nil
+}
+
+func (res *Resource) findEarliestAvailableTime(startTime, duration, taskOffset, locationOffset int) int {
 	// Convert start time to resource's timezone
-	checkStart := startTime + (taskOffset - resourceOffset)
+	checkStart := startTime + (taskOffset - locationOffset)
 	checkEnd := checkStart + duration
 
 	if res.isAvailable(checkStart, checkEnd) == [2]int{0, 0} {
-		return checkStart - (taskOffset - resourceOffset) // Convert back to task's timezone
+		return checkStart - (taskOffset - locationOffset) // Convert back to task's timezone
 	}
 
 	nextAvailable := checkEnd
 	if res.isAvailable(nextAvailable, nextAvailable+duration) == [2]int{0, 0} {
-		return nextAvailable - (taskOffset - resourceOffset) // Convert back to task's timezone
+		return nextAvailable - (taskOffset - locationOffset) // Convert back to task's timezone
 	}
 
-	return -1 // Indicate no availability found
+	return _NoAvailability
 }
