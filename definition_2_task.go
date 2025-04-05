@@ -17,7 +17,7 @@ type Task struct {
 
 	TaskLoad
 
-	ID                int
-	InitiatorID       int
-	EstimatedDuration int
+	ID                int64
+	InitiatorID       int64
+	EstimatedDuration int64
 }

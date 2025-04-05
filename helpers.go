@@ -1,6 +1,6 @@
 package scheduler
 
-func max(a, b int) int {
+func max(a, b int64) int64 {
 	if a > b {
 		return a
 	}
@@ -8,7 +8,7 @@ func max(a, b int) int {
 	return b
 }
 
-func min(a, b int) int {
+func min(a, b int64) int64 {
 	if a < b {
 		return a
 	}

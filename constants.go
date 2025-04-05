@@ -1,3 +1,3 @@
 package scheduler
 
-const _NoAvailability = -1
+const _NoAvailability int64 = -1
