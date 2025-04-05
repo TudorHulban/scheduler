@@ -11,7 +11,6 @@ type Location struct {
 	LocationOffset int
 
 	Name      string
-	TaskIDs   []int
 	Resources []*Resource
 }
 
@@ -25,13 +24,13 @@ type ParamsCanRun struct {
 
 type ResponseCanRun struct {
 	WhenCanStart    int
-	CostIfScheduled float64
+	CostIfScheduled float32
 }
 
-// CanRun returns zero if it can run within interval and
+// CanRunCheapest returns zero for WhenCanStart if it can run within passed nterval and
 // also schedules the task to the cheapest available resource and provides the cost.
 //
-// If it cannot run within interval, it provides the timestamp from which it could but no cost.
+// If it cannot run within interval, it provides the timestamp from which it could in WhenCanStart but no cost.
 func (loc *Location) CanRunCheapest(params *ParamsCanRun) (*ResponseCanRun, error) {
 	task := params.Task
 	startTime := params.TimeStart
@@ -45,7 +44,7 @@ func (loc *Location) CanRunCheapest(params *ParamsCanRun) (*ResponseCanRun, erro
 	for _, dependency := range task.Dependencies {
 		foundResource := false
 		var cheapestResource *Resource
-		minCost := -1.0
+		var minCost float32 = math.MaxFloat32
 
 		for _, res := range loc.Resources {
 			if res.ResourceType == dependency.ResourceType {
@@ -57,7 +56,10 @@ func (loc *Location) CanRunCheapest(params *ParamsCanRun) (*ResponseCanRun, erro
 
 				overlap := res.isAvailable(taskStartInResourceTZ, taskEndInResourceTZ)
 				if overlap[0] == 0 && overlap[1] == 0 { // No overlap, resource is available
-					cost := res.CostPerHour * task.EstimatedDuration
+					cost, err := calculateTaskCost(task, res)
+					if err != nil {
+						continue // Skip this resource if cost calculation fails
+					}
 					if cheapestResource == nil || cost < minCost {
 						cheapestResource = res
 						minCost = cost
@@ -96,13 +98,17 @@ func (loc *Location) CanRunCheapest(params *ParamsCanRun) (*ResponseCanRun, erro
 	// If all dependencies can be met, schedule on the cheapest combination (simplified for now)
 	if len(availableResources) == len(task.Dependencies) {
 		var chosenResource *Resource
-		minTotalCost := -1.0
+
+		var minTotalCost float32 = math.MaxFloat32
 
 		// Simple approach: find the cheapest resource that can fulfill the first dependency
 		if len(task.Dependencies) > 0 {
 			for _, res := range availableResources {
 				if res.ResourceType == task.Dependencies[0].ResourceType {
-					cost := res.CostPerHour * task.EstimatedDuration
+					cost, err := calculateTaskCost(task, res)
+					if err != nil {
+						continue
+					}
 					if chosenResource == nil || cost < minTotalCost {
 						chosenResource = res
 						minTotalCost = cost
@@ -111,7 +117,7 @@ func (loc *Location) CanRunCheapest(params *ParamsCanRun) (*ResponseCanRun, erro
 			}
 		}
 
-		if chosenResource != nil {
+		if chosenResource != nil && minTotalCost != math.MaxFloat32 {
 			scheduleStart := startTime + taskOffset
 			scheduleEnd := endTime + taskOffset
 			interval := [3]int{scheduleStart, scheduleEnd, locationOffset}
@@ -127,7 +133,7 @@ func (loc *Location) CanRunCheapest(params *ParamsCanRun) (*ResponseCanRun, erro
 		for _, res := range loc.Resources {
 			if res.ResourceType == dependency.ResourceType {
 				resourceOffset := 0 // Assuming resource's schedule offset is its local offset
-				earliestAvailable := res.findEarliestAvailableTime(endTime+(taskOffset-resourceOffset), int(task.EstimatedDuration), taskOffset, locationOffset)
+				earliestAvailable := res.findEarliestAvailableTime(endTime+(taskOffset-resourceOffset), task.EstimatedDuration, taskOffset, locationOffset)
 				if earliestAvailable != -1 {
 					if earliestStartTime == -1 || earliestAvailable < earliestStartTime {
 						earliestStartTime = earliestAvailable
@@ -149,6 +155,10 @@ func (loc *Location) CanRunCheapest(params *ParamsCanRun) (*ResponseCanRun, erro
 	return &ResponseCanRun{WhenCanStart: endTime, CostIfScheduled: 0}, errors.New("no suitable resources available")
 }
 
+// CanRun returns zero for WhenCanStart if it can run within passed nterval and
+// also schedules the task to the first available resource and provides the cost.
+//
+// If it cannot run within interval, it provides the timestamp from which it could in WhenCanStart but no cost.
 func (loc *Location) CanRun(params *ParamsCanRun) (*ResponseCanRun, error) {
 	task := params.Task
 	startTime := params.TimeStart
@@ -157,6 +167,7 @@ func (loc *Location) CanRun(params *ParamsCanRun) (*ResponseCanRun, error) {
 	locationOffset := loc.LocationOffset
 
 	scheduledResources := make(map[uint8]*Resource) // Track if a resource type is already scheduled
+	var totalCost float32 = 0
 
 	// Check if all dependencies can be met within the time interval
 	for _, dependency := range task.Dependencies {
@@ -173,6 +184,13 @@ func (loc *Location) CanRun(params *ParamsCanRun) (*ResponseCanRun, error) {
 					overlap := res.isAvailable(taskStartInResourceTZ, taskEndInResourceTZ)
 					if overlap[0] == 0 && overlap[1] == 0 { // No overlap, resource is available
 						scheduledResources[res.ResourceType] = res
+						cost, err := calculateTaskCost(task, res)
+						if err != nil {
+							fmt.Printf("Error calculating cost for task %d on resource %d: %v\n", task.ID, res.ID, err)
+							// Decide how to handle cost calculation errors - perhaps skip this resource type
+						} else {
+							totalCost += cost
+						}
 						foundResource = true
 						break // Found a resource for this dependency
 					}
@@ -208,7 +226,7 @@ func (loc *Location) CanRun(params *ParamsCanRun) (*ResponseCanRun, error) {
 		for _, res := range scheduledResources {
 			res.schedule[interval] = task.ID // Schedule on all the resources that met dependencies
 		}
-		return &ResponseCanRun{WhenCanStart: 0, CostIfScheduled: 0}, nil
+		return &ResponseCanRun{WhenCanStart: 0, CostIfScheduled: totalCost}, nil
 	}
 
 	// If not all dependencies could be met within the interval, return earliest start time
@@ -248,13 +266,13 @@ func (loc *Location) GetRunCost(params *ParamsCanRun) (*ResponseCanRun, error) {
 	locationOffset := loc.LocationOffset
 
 	earliestStartTimeOverall := 0
-	totalCost := 0.0
+	var totalCost float32 = 0
 	earliestStartTimes := make(map[uint8]int)
-	minCosts := make(map[uint8]float64)
+	minCosts := make(map[uint8]float32)
 
 	for _, dependency := range task.Dependencies {
 		earliestStartTimeForType := -1
-		minCostForType := math.MaxFloat64
+		var maxCostForType float32 = math.MaxFloat32
 		resourceFound := false
 
 		for _, res := range loc.Resources {
@@ -269,15 +287,21 @@ func (loc *Location) GetRunCost(params *ParamsCanRun) (*ResponseCanRun, error) {
 				availableStartTime := res.findEarliestAvailableTimeFrom(checkStartTime, duration, taskOffset, locationOffset)
 
 				if availableStartTime != -1 {
-					cost := res.CostPerHour * task.EstimatedDuration
+					costPerUnit, ok := res.costPerLoadUnit[task.TaskLoad.LoadUnit]
+					if !ok {
+						continue // Resource doesn't support this load unit
+					}
+					cost := task.TaskLoad.Load * costPerUnit
+
 					// Convert available start time back to task's timezone for comparison
 					availableStartTimeInTaskTZ := availableStartTime - (taskOffset - resourceOffset)
 
 					if earliestStartTimeForType == -1 || availableStartTimeInTaskTZ < earliestStartTimeForType {
 						earliestStartTimeForType = availableStartTimeInTaskTZ
 					}
-					if cost < minCostForType {
-						minCostForType = cost
+
+					if cost < maxCostForType {
+						maxCostForType = cost
 					}
 				}
 			}
@@ -292,7 +316,7 @@ func (loc *Location) GetRunCost(params *ParamsCanRun) (*ResponseCanRun, error) {
 		}
 
 		earliestStartTimes[dependency.ResourceType] = earliestStartTimeForType
-		minCosts[dependency.ResourceType] = minCostForType
+		minCosts[dependency.ResourceType] = maxCostForType
 	}
 
 	// Find the latest of all earliest start times
@@ -304,7 +328,12 @@ func (loc *Location) GetRunCost(params *ParamsCanRun) (*ResponseCanRun, error) {
 
 	// Calculate the total cost
 	for _, cost := range minCosts {
-		totalCost += cost
+		if cost != math.MaxFloat32 {
+			totalCost += cost
+		} else {
+			// Handle case where a cost wasn't found (shouldn't happen with the checks above)
+			return &ResponseCanRun{WhenCanStart: 0, CostIfScheduled: 0}, errors.New("could not determine cost for all dependencies")
+		}
 	}
 
 	return &ResponseCanRun{WhenCanStart: earliestStartTimeOverall, CostIfScheduled: totalCost}, nil

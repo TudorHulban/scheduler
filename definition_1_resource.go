@@ -6,25 +6,28 @@ import (
 )
 
 type Resource struct {
-	Name        string
-	schedule    map[[3]int]int // [3]int is [unix_start_time, unix_end_time, GMT offset], int is task ID
-	CostPerHour float64
+	Name string
+
+	schedule        map[[3]int]int    // [3]int is [unix_start_time, unix_end_time, GMT offset], int is task ID
+	costPerLoadUnit map[uint8]float32 // load unit | cost per unit
 
 	ID           int
 	ResourceType uint8
 }
 
 type ParamsNewResource struct {
-	Name        string
-	CostPerHour float64
+	Name            string
+	CostPerLoadUnit map[uint8]float32
+	ResourceType    uint8
 }
 
 func NewResource(params *ParamsNewResource) *Resource {
 	return &Resource{
-		Name:        params.Name,
-		CostPerHour: params.CostPerHour,
+		Name:         params.Name,
+		ResourceType: params.ResourceType,
 
-		schedule: map[[3]int]int{},
+		costPerLoadUnit: params.CostPerLoadUnit,
+		schedule:        map[[3]int]int{},
 	}
 }
 

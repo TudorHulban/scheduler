@@ -6,10 +6,18 @@ type TaskDependency struct {
 	ResourceQuantity    uint8
 }
 
-type Task struct {
-	Name              string
-	EstimatedDuration float64
-	Dependencies      []TaskDependency
+type TaskLoad struct {
+	Load     float32
+	LoadUnit uint8
+}
 
-	ID int
+type Task struct {
+	Name         string
+	Dependencies []TaskDependency
+
+	TaskLoad
+
+	ID                int
+	InitiatorID       int
+	EstimatedDuration int
 }
