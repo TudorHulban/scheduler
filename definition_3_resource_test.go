@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -65,15 +66,15 @@ func TestLifeCycleResource(t *testing.T) {
 
 	ctx := context.Background()
 
-	require.Nil(t,
-		res.GetAvailability(
-			&TimeInterval{
-				TimeStart: 0,
-				TimeEnd:   2000,
-				Offset:    7200,
-			},
-		),
+	ovelapsEmpty, hasAvailabilityEmpty := res.GetAvailability(
+		&TimeInterval{
+			TimeStart:     0,
+			TimeEnd:       2000,
+			SecondsOffset: 7200,
+		},
 	)
+	require.True(t, hasAvailabilityEmpty)
+	require.Nil(t, ovelapsEmpty)
 
 	taskScheduledAt0, errGetAt0 := res.GetTask(0, 0)
 	require.Error(t, errGetAt0)
@@ -87,9 +88,9 @@ func TestLifeCycleResource(t *testing.T) {
 		ctx,
 		&ParamsTask{
 			TimeInterval: TimeInterval{
-				TimeStart: 1000,
-				TimeEnd:   2000,
-				Offset:    7200, // 2 hours
+				TimeStart:     1000,
+				TimeEnd:       2000,
+				SecondsOffset: 7200, // 2 hours
 			},
 
 			TaskID: 101,
@@ -97,23 +98,43 @@ func TestLifeCycleResource(t *testing.T) {
 	)
 	require.NoError(t, errAddTask)
 	require.Empty(t, overlapAddTask)
-
 	require.Len(t,
 		res.schedule,
 		1,
 	)
 
-	overlapGetAvailability := res.GetAvailability(
+	fmt.Println(
+		res.GetSchedule(),
+	)
+
+	overlapsWTask, hasAvailabilityWTask := res.GetAvailability(
 		&TimeInterval{
-			TimeStart: 0,
-			TimeEnd:   3000,
-			Offset:    7200,
+			TimeStart:     0,
+			TimeEnd:       3000,
+			SecondsOffset: 7200,
 		},
 	)
-	require.NotEmpty(t, overlapAddTask)
+	require.False(t, hasAvailabilityWTask)
+	require.NotEmpty(t, overlapsWTask)
+	require.Len(t,
+		overlapsWTask,
+		2,
+	)
+	require.EqualValues(t,
+		0,
+		overlapsWTask[0].TimeStart,
+	)
 	require.EqualValues(t,
 		1000,
-		overlapGetAvailability.OverlapStart,
+		overlapsWTask[0].TimeEnd,
+	)
+	require.EqualValues(t,
+		2000,
+		overlapsWTask[1].TimeStart,
+	)
+	require.EqualValues(t,
+		3000,
+		overlapsWTask[1].TimeEnd,
 	)
 
 	taskScheduledAt100, errGetAt100 := res.GetTask(100, 0)
