@@ -50,8 +50,14 @@ func (loc *Location) CanRunCheapest(params *ParamsCanRun) (*ResponseCanRun, erro
 				taskStartInResourceTZ := startTime + (params.TaskOffset - loc.LocationOffset)
 				taskEndInResourceTZ := endTime + (params.TaskOffset - loc.LocationOffset)
 
-				overlap := res.isAvailable(taskStartInResourceTZ, taskEndInResourceTZ)
-				if overlap[0] == 0 && overlap[1] == 0 { // No overlap, resource is available
+				overlap := res.GetAvailability(
+					&TimeInterval{
+						TimeStart: taskStartInResourceTZ,
+						TimeEnd:   taskEndInResourceTZ,
+					},
+				)
+
+				if overlap.IsAvailable() {
 					cost, errCost := calculateTaskCost(task, res)
 					if errCost != nil {
 						continue // Skip this resource if cost calculation fails
@@ -131,15 +137,11 @@ func (loc *Location) CanRunCheapest(params *ParamsCanRun) (*ResponseCanRun, erro
 		}
 
 		if chosenResource != nil && minTotalCost != math.MaxFloat32 {
-			scheduleStart := startTime + params.TaskOffset
-			scheduleEnd := endTime + params.TaskOffset
-			interval := [3]int64{
-				scheduleStart,
-				scheduleEnd,
-				loc.LocationOffset,
-			}
-
-			chosenResource.schedule[interval] = task.ID
+			chosenResource.schedule[TimeInterval{
+				TimeStart: startTime + params.TaskOffset,
+				TimeEnd:   endTime + params.TaskOffset,
+				Offset:    loc.LocationOffset,
+			}] = task.ID
 
 			return &ResponseCanRun{
 					WhenCanStart:    0,
@@ -214,16 +216,24 @@ func (loc *Location) CanRun(params *ParamsCanRun) (*ResponseCanRun, error) {
 			if res.ResourceType == dependency.ResourceType {
 				if _, alreadyScheduled := scheduledResources[res.ResourceType]; !alreadyScheduled {
 					// Convert task times to resource's time zone
-					taskStartInResourceTZ := params.TimeStart + params.TaskOffset - loc.LocationOffset
-					taskEndInResourceTZ := params.TimeEnd + params.TaskOffset - loc.LocationOffset
 
-					overlap := res.isAvailable(taskStartInResourceTZ, taskEndInResourceTZ)
-					if overlap[0] == 0 && overlap[1] == 0 { // No overlap, resource is available
+					overlap := res.GetAvailability(
+						&TimeInterval{
+							TimeStart: params.TimeStart + params.TaskOffset - loc.LocationOffset,
+							TimeEnd:   params.TimeEnd + params.TaskOffset - loc.LocationOffset,
+						},
+					)
+					if overlap.IsAvailable() {
 						scheduledResources[res.ResourceType] = res
 
 						cost, err := calculateTaskCost(task, res)
 						if err != nil {
-							fmt.Printf("Error calculating cost for task %d on resource %d: %v\n", task.ID, res.ID, err)
+							fmt.Printf(
+								"Error calculating cost for task %d on resource %d: %v\n",
+								task.ID,
+								res.ID,
+								err,
+							)
 							// Decide how to handle cost calculation errors - perhaps skip this resource type
 						} else {
 							totalCost += cost
@@ -276,14 +286,12 @@ func (loc *Location) CanRun(params *ParamsCanRun) (*ResponseCanRun, error) {
 
 	// If all dependencies can be met, schedule the task
 	if len(scheduledResources) == len(task.Dependencies) {
-		interval := [3]int64{
-			params.TimeStart + params.TaskOffset,
-			endTime + params.TaskOffset,
-			loc.LocationOffset,
-		}
-
 		for _, res := range scheduledResources {
-			res.schedule[interval] = task.ID // Schedule on all the resources that met dependencies
+			res.schedule[TimeInterval{
+				TimeStart: params.TimeStart + params.TaskOffset,
+				TimeEnd:   endTime + params.TaskOffset,
+				Offset:    loc.LocationOffset,
+			}] = task.ID // Schedule on all the resources that met dependencies
 		}
 
 		return &ResponseCanRun{

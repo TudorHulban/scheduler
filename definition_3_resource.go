@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"sort"
 
 	goerrors "github.com/TudorHulban/go-errors"
 )
@@ -10,8 +11,8 @@ import (
 type Resource struct {
 	Name string
 
-	schedule        map[[3]int64]int64 // [3]int is [unix_start_time, unix_end_time, GMT offset]Task ID
-	costPerLoadUnit map[uint8]float32  // load unit | cost per unit
+	schedule        map[TimeInterval]int64 // TimeInterval | Task ID
+	costPerLoadUnit map[uint8]float32      // load unit | cost per unit
 
 	ID           int
 	ResourceType uint8
@@ -76,46 +77,88 @@ func NewResource(params *ParamsNewResource) (*Resource, error) {
 			ResourceType: params.ResourceType,
 
 			costPerLoadUnit: params.CostPerLoadUnit,
-			schedule:        make(map[[3]int64]int64),
+			schedule:        make(map[TimeInterval]int64),
 		},
 		nil
 }
 
-// isAvailable returns overlapStart, overlapEnd.
-func (res *Resource) isAvailable(timeStart, timeEnd int64) [2]int64 {
-	for interval := range res.schedule {
-		scheduleStart := interval[0]
-		scheduleEnd := interval[1]
-		offset := interval[2]
+func (res *Resource) GetAvailability(searchInterval *TimeInterval) []TimeInterval {
+	var busyUTCIntervals []TimeInterval
 
-		withOffsetScheduleStart := scheduleStart - offset
-		withOffsetScheduleEnd := scheduleEnd - offset
-
-		overlapStart := max(timeStart, withOffsetScheduleStart)
-		overlapEnd := min(timeEnd, withOffsetScheduleEnd)
-
-		if overlapStart < overlapEnd {
-			return [2]int64{
-				overlapStart,
-				overlapEnd,
-			}
-		}
+	for scheduledInterval := range res.schedule {
+		busyUTCIntervals = append(
+			busyUTCIntervals,
+			TimeInterval{
+				TimeStart: scheduledInterval.GetUTCTimeStart(),
+				TimeEnd:   scheduledInterval.GetUTCTimeEnd(),
+			},
+		)
 	}
 
-	return [2]int64{}
+	// Sort busy intervals by start time
+	sort.Slice(
+		busyUTCIntervals,
+		func(i, j int) bool {
+			return busyUTCIntervals[i].TimeStart < busyUTCIntervals[j].TimeStart
+		},
+	)
+
+	var availableIntervals []TimeInterval
+
+	currentStart := searchInterval.GetUTCTimeStart()
+	searchEnd := searchInterval.GetUTCTimeEnd()
+
+	for _, busy := range busyUTCIntervals {
+		// Skip busy intervals that don't overlap with our search window
+		if busy.TimeEnd <= currentStart {
+			continue
+		}
+
+		// Busy interval is completely after our search window
+		if busy.TimeStart >= searchEnd {
+			break
+		}
+
+		// If there's a gap before this busy interval, add it as available
+		if busy.TimeStart > currentStart {
+			availableIntervals = append(
+				availableIntervals,
+				TimeInterval{
+					TimeStart: currentStart,
+					TimeEnd:   busy.TimeStart,
+					Offset:    searchInterval.Offset, // Maintain original offset
+				},
+			)
+		}
+
+		// Move currentStart to the end of this busy interval
+		currentStart = max(currentStart, busy.TimeEnd)
+	}
+
+	// Add remaining time after last busy interval
+	if currentStart < searchEnd {
+		availableIntervals = append(
+			availableIntervals,
+			TimeInterval{
+				TimeStart: currentStart,
+				TimeEnd:   searchEnd,
+				Offset:    searchInterval.Offset,
+			},
+		)
+	}
+
+	return availableIntervals
 }
 
 type ParamsTask struct {
-	TimeStart int64
-	TimeEnd   int64
-	GMTOffset int64
+	TimeInterval
 
 	TaskID int64
 }
 
-func (res *Resource) AddTask(_ context.Context, params *ParamsTask) ([2]int64, error) {
+func (res *Resource) AddTask(_ context.Context, params *ParamsTask) (*Availability, error) {
 	if params.TimeStart >= params.TimeEnd {
-		return [2]int64{},
+		return nil,
 			goerrors.ErrInvalidInput{
 				Caller:     "AddTask",
 				InputName:  "TimeEnd",
@@ -129,16 +172,16 @@ func (res *Resource) AddTask(_ context.Context, params *ParamsTask) ([2]int64, e
 	if params.TaskID <= 0 {
 	}
 
-	overlap := res.isAvailable(params.TimeStart, params.TimeEnd)
+	overlap := res.GetAvailability(&params.TimeInterval)
 
-	if overlap == [2]int64{} {
-		res.schedule[[3]int64{
-			params.TimeStart,
-			params.TimeEnd,
-			params.GMTOffset,
+	if overlap == nil {
+		res.schedule[TimeInterval{
+			TimeStart: params.TimeStart,
+			TimeEnd:   params.TimeEnd,
+			Offset:    params.Offset,
 		}] = params.TaskID
 
-		return [2]int64{},
+		return nil,
 			nil
 	}
 
@@ -147,25 +190,22 @@ func (res *Resource) AddTask(_ context.Context, params *ParamsTask) ([2]int64, e
 }
 
 type ResponseGetTask struct {
-	TaskID      int64
-	TaskEndTime int64
+	TaskID                      int64
+	AlreadyScheduledTaskEndTime int64
 }
 
-// GetTask returns scheduled task id and when estimated to finish if there is one scheduled.
 func (res *Resource) GetTask(atTimestamp, offset int64) (*ResponseGetTask, error) {
 	for interval, taskID := range res.schedule {
-		scheduleStart := interval[0]
-		scheduleEnd := interval[1]
+		offsetDifference := interval.Offset - offset
 
-		// Adjust the times to offset
-		scheduleStartUTC := scheduleStart - interval[2]
-		scheduleEndUTC := scheduleEnd - interval[2]
-		atTimestampUTC := atTimestamp - offset
+		scheduleStartUTC := interval.TimeStart + offsetDifference
+		scheduleEndUTC := interval.TimeEnd + offsetDifference
+		atTimestampUTC := atTimestamp + offsetDifference
 
 		if scheduleEndUTC >= atTimestampUTC && scheduleStartUTC <= atTimestampUTC {
 			return &ResponseGetTask{
-					TaskID:      taskID,
-					TaskEndTime: scheduleEnd,
+					TaskID:                      taskID,
+					AlreadyScheduledTaskEndTime: scheduleEndUTC,
 				},
 				nil
 		}
@@ -178,13 +218,15 @@ func (res *Resource) GetTask(atTimestamp, offset int64) (*ResponseGetTask, error
 }
 
 func (res *Resource) RemoveTask(_ context.Context, params *ParamsTask) error {
-	keysToDelete := make([][3]int64, 0)
+	keysToDelete := make([]TimeInterval, 0)
 
 	for interval, taskID := range res.schedule {
 		if taskID == params.TaskID {
-			if params.TimeStart <= interval[0] &&
-				interval[1] <= params.TimeEnd &&
-				interval[2] == params.GMTOffset {
+			offsetDifference := interval.Offset - params.Offset
+
+			if params.TimeStart+offsetDifference <= interval.TimeStart &&
+				interval.TimeEnd+offsetDifference <= params.TimeEnd &&
+				interval.Offset == params.Offset {
 				keysToDelete = append(
 					keysToDelete,
 					interval,
@@ -215,13 +257,28 @@ func (res *Resource) findEarliestAvailableTime(params *paramsFindEarliestAvailab
 	checkStart := params.TimeStart + (params.OffsetTask - params.OffsetLocation)
 	checkEnd := checkStart + params.Duration
 
-	if res.isAvailable(checkStart, checkEnd) == [2]int64{} {
-		return checkStart - (params.OffsetTask - params.OffsetLocation) // Convert back to task's timezone
+	offsetDifference := params.OffsetTask - params.OffsetLocation
+
+	if res.GetAvailability(
+		&TimeInterval{
+			TimeStart: checkStart,
+			TimeEnd:   checkEnd,
+			Offset:    offsetDifference,
+		},
+	) == nil {
+		return checkStart - offsetDifference
 	}
 
+	// TODO: here it should be a loop, to check also for next task until we find availability.
 	nextAvailable := checkEnd
-	if res.isAvailable(nextAvailable, nextAvailable+params.Duration) == [2]int64{} {
-		return nextAvailable - (params.OffsetTask - params.OffsetLocation) // Convert back to task's timezone
+
+	if res.GetAvailability(
+		&TimeInterval{
+			TimeStart: nextAvailable,
+			TimeEnd:   nextAvailable + params.Duration,
+		},
+	) == nil {
+		return nextAvailable - offsetDifference
 	}
 
 	return _NoAvailability
@@ -232,7 +289,12 @@ func (res *Resource) findEarliestAvailableTimeFrom(params *paramsFindEarliestAva
 	checkStart := params.TimeStart + (params.OffsetTask - params.OffsetLocation)
 	checkEnd := checkStart + params.Duration
 
-	if res.isAvailable(checkStart, checkEnd) == [2]int64{} {
+	if res.GetAvailability(
+		&TimeInterval{
+			TimeStart: checkStart,
+			TimeEnd:   checkEnd,
+		},
+	) == nil {
 		return checkStart
 	}
 
@@ -241,7 +303,8 @@ func (res *Resource) findEarliestAvailableTimeFrom(params *paramsFindEarliestAva
 	latestEndTime := checkStart
 
 	for interval := range res.schedule {
-		scheduleEnd := interval[1] - interval[2] // End time in UTC
+		scheduleEnd := interval.GetUTCTimeEnd()
+
 		if scheduleEnd > latestEndTime {
 			latestEndTime = scheduleEnd
 		}
@@ -250,7 +313,12 @@ func (res *Resource) findEarliestAvailableTimeFrom(params *paramsFindEarliestAva
 	nextPossibleStart := latestEndTime
 	nextPossibleEnd := nextPossibleStart + params.Duration
 
-	if res.isAvailable(nextPossibleStart, nextPossibleEnd) == [2]int64{} {
+	if res.GetAvailability(
+		&TimeInterval{
+			TimeStart: nextPossibleStart,
+			TimeEnd:   nextPossibleEnd,
+		},
+	) == nil {
 		return nextPossibleStart
 	}
 

@@ -65,6 +65,16 @@ func TestLifeCycleResource(t *testing.T) {
 
 	ctx := context.Background()
 
+	require.Nil(t,
+		res.GetAvailability(
+			&TimeInterval{
+				TimeStart: 0,
+				TimeEnd:   2000,
+				Offset:    7200,
+			},
+		),
+	)
+
 	taskScheduledAt0, errGetAt0 := res.GetTask(0, 0)
 	require.Error(t, errGetAt0)
 	require.Nil(t, taskScheduledAt0)
@@ -73,16 +83,40 @@ func TestLifeCycleResource(t *testing.T) {
 	require.Error(t, errGetAt1000)
 	require.Nil(t, taskScheduledAt1000)
 
-	overlap, errAddTask := res.AddTask(
+	overlapAddTask, errAddTask := res.AddTask(
 		ctx,
 		&ParamsTask{
-			TimeStart: 1000,
-			TimeEnd:   2000,
-			GMTOffset: 7200, // 2 hours
+			TimeInterval: TimeInterval{
+				TimeStart: 1000,
+				TimeEnd:   2000,
+				Offset:    7200, // 2 hours
+			},
 
 			TaskID: 101,
 		},
 	)
 	require.NoError(t, errAddTask)
-	require.Empty(t, overlap)
+	require.Empty(t, overlapAddTask)
+
+	require.Len(t,
+		res.schedule,
+		1,
+	)
+
+	overlapGetAvailability := res.GetAvailability(
+		&TimeInterval{
+			TimeStart: 0,
+			TimeEnd:   3000,
+			Offset:    7200,
+		},
+	)
+	require.NotEmpty(t, overlapAddTask)
+	require.EqualValues(t,
+		1000,
+		overlapGetAvailability.OverlapStart,
+	)
+
+	taskScheduledAt100, errGetAt100 := res.GetTask(100, 0)
+	require.Error(t, errGetAt100)
+	require.Nil(t, taskScheduledAt100)
 }
