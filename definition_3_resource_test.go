@@ -76,24 +76,26 @@ func TestLifeCycleResource(t *testing.T) {
 	require.True(t, hasAvailabilityEmpty)
 	require.Nil(t, ovelapsEmpty)
 
-	taskScheduledAt0, errGetAt0 := res.GetTask(0, 0)
+	taskScheduledAt0, errGetAt0 := res.GetRun(0, 0)
 	require.Error(t, errGetAt0)
 	require.Nil(t, taskScheduledAt0)
 
-	taskScheduledAt1000, errGetAt1000 := res.GetTask(1000, 0)
+	responseFor1000, errGetAt1000 := res.GetRun(1000, 0)
 	require.Error(t, errGetAt1000)
-	require.Nil(t, taskScheduledAt1000)
+	require.Nil(t, responseFor1000)
 
-	overlapAddTask, errAddTask := res.AddTask(
+	var idRun RunID = 101
+
+	overlapAddTask, errAddTask := res.AddRun(
 		ctx,
-		&ParamsTask{
+		&ParamsRun{
 			TimeInterval: TimeInterval{
 				TimeStart:     1000,
 				TimeEnd:       2000,
 				SecondsOffset: 7200, // 2 hours
 			},
 
-			TaskID: 101,
+			ID: idRun,
 		},
 	)
 	require.NoError(t, errAddTask)
@@ -137,7 +139,26 @@ func TestLifeCycleResource(t *testing.T) {
 		overlapsWTask[1].TimeEnd,
 	)
 
-	taskScheduledAt100, errGetAt100 := res.GetTask(100, 0)
+	taskScheduledAt100, errGetAt100 := res.GetRun(100, 0)
 	require.Error(t, errGetAt100)
 	require.Nil(t, taskScheduledAt100)
+
+	responseTask1000, errGet1000 := res.GetRun(1000, 7200)
+	require.NoError(t, errGet1000)
+	require.EqualValues(t,
+		idRun,
+		responseTask1000.ID,
+	)
+
+	require.NoError(t,
+		res.RemoveRun(idRun),
+	)
+
+	responseRemovedTask1000, errGetRemoved1000 := res.GetRun(1000, 7200)
+	require.Error(t, errGetRemoved1000)
+	require.Nil(t, responseRemovedTask1000)
+
+	fmt.Println(
+		res.GetSchedule(),
+	)
 }

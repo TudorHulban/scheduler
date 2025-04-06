@@ -10,11 +10,13 @@ import (
 	goerrors "github.com/TudorHulban/go-errors"
 )
 
+type RunID int64
+
 type Resource struct {
 	Name string
 
-	schedule        map[TimeInterval]int64 // TimeInterval | Task ID
-	costPerLoadUnit map[uint8]float32      // load unit | cost per unit
+	schedule        map[TimeInterval]RunID
+	costPerLoadUnit map[uint8]float32 // load unit | cost per unit
 
 	ID           int
 	ResourceType uint8
@@ -79,7 +81,7 @@ func NewResource(params *ParamsNewResource) (*Resource, error) {
 			ResourceType: params.ResourceType,
 
 			costPerLoadUnit: params.CostPerLoadUnit,
-			schedule:        make(map[TimeInterval]int64),
+			schedule:        make(map[TimeInterval]RunID),
 		},
 		nil
 }
@@ -207,13 +209,13 @@ func (res *Resource) GetAvailability(searchInterval *TimeInterval) ([]TimeInterv
 		false
 }
 
-type ParamsTask struct {
+type ParamsRun struct {
 	TimeInterval
 
-	TaskID int64
+	ID RunID
 }
 
-func (res *Resource) AddTask(_ context.Context, params *ParamsTask) ([]TimeInterval, error) {
+func (res *Resource) AddRun(_ context.Context, params *ParamsRun) ([]TimeInterval, error) {
 	if params.TimeStart >= params.TimeEnd {
 		return nil,
 			goerrors.ErrInvalidInput{
@@ -226,33 +228,50 @@ func (res *Resource) AddTask(_ context.Context, params *ParamsTask) ([]TimeInter
 			}
 	}
 
-	if params.TaskID <= 0 {
+	if params.ID <= 0 {
+		return nil, goerrors.ErrInvalidInput{
+			Caller:     "AddRun",
+			InputName:  "ID",
+			InputValue: params.ID,
+			Issue: goerrors.ErrNegativeInput{
+				InputName: "ID",
+			},
+		}
 	}
 
-	overlaps, hasAvailability := res.GetAvailability(&params.TimeInterval)
+	for interval := range res.schedule {
+		if res.schedule[interval] == params.ID {
+			return nil,
+				fmt.Errorf(
+					"run ID %d already exists",
+					params.ID,
+				)
+		}
+	}
 
-	if hasAvailability {
-		res.schedule[TimeInterval{
-			TimeStart:     params.TimeStart,
-			TimeEnd:       params.TimeEnd,
-			SecondsOffset: params.SecondsOffset,
-		}] = params.TaskID
-
+	overlaps, available := res.GetAvailability(&params.TimeInterval)
+	if !available {
 		return overlaps,
-			nil
+			errors.New("requested time slot is busy")
 	}
 
-	return overlaps,
-		errors.New("busy")
+	// Add the run
+	res.schedule[TimeInterval{
+		TimeStart:     params.TimeStart,
+		TimeEnd:       params.TimeEnd,
+		SecondsOffset: params.SecondsOffset,
+	}] = params.ID
+
+	return nil, nil
 }
 
-type ResponseGetTask struct {
-	TaskID                      int64
+type ResponseGetRun struct {
+	ID                          RunID
 	AlreadyScheduledTaskEndTime int64
 }
 
-func (res *Resource) GetTask(atTimestamp, offset int64) (*ResponseGetTask, error) {
-	for interval, taskID := range res.schedule {
+func (res *Resource) GetRun(atTimestamp, offset int64) (*ResponseGetRun, error) {
+	for interval, runID := range res.schedule {
 		offsetDifference := interval.SecondsOffset - offset
 
 		scheduleStartUTC := interval.TimeStart + offsetDifference
@@ -260,8 +279,8 @@ func (res *Resource) GetTask(atTimestamp, offset int64) (*ResponseGetTask, error
 		atTimestampUTC := atTimestamp + offsetDifference
 
 		if scheduleEndUTC >= atTimestampUTC && scheduleStartUTC <= atTimestampUTC {
-			return &ResponseGetTask{
-					TaskID:                      taskID,
+			return &ResponseGetRun{
+					ID:                          runID,
 					AlreadyScheduledTaskEndTime: scheduleEndUTC,
 				},
 				nil
@@ -274,33 +293,16 @@ func (res *Resource) GetTask(atTimestamp, offset int64) (*ResponseGetTask, error
 		)
 }
 
-func (res *Resource) RemoveTask(_ context.Context, params *ParamsTask) error {
-	keysToDelete := make([]TimeInterval, 0)
+func (res *Resource) RemoveRun(runID RunID) error {
+	for interval, id := range res.schedule {
+		if id == runID {
+			delete(res.schedule, interval)
 
-	for interval, taskID := range res.schedule {
-		if taskID == params.TaskID {
-			offsetDifference := interval.SecondsOffset - params.SecondsOffset
-
-			if params.TimeStart+offsetDifference <= interval.TimeStart &&
-				interval.TimeEnd+offsetDifference <= params.TimeEnd &&
-				interval.SecondsOffset == params.SecondsOffset {
-				keysToDelete = append(
-					keysToDelete,
-					interval,
-				)
-			}
+			return nil
 		}
 	}
 
-	if len(keysToDelete) == 0 {
-		return errors.New("no schedules found within the given timeframe")
-	}
-
-	for _, keyToDelete := range keysToDelete {
-		delete(res.schedule, keyToDelete)
-	}
-
-	return nil
+	return fmt.Errorf("run %d not found in schedule", runID)
 }
 
 type paramsFindEarliestAvailableTime struct {
