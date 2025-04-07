@@ -24,6 +24,11 @@ type Resource struct {
 	ResourceType uint8
 }
 
+type resourceOption struct {
+	res  *Resource
+	cost float32
+}
+
 type ParamsNewResource struct {
 	Name            string
 	CostPerLoadUnit map[uint8]float32
@@ -295,4 +300,15 @@ func (res *Resource) RemoveRun(runID RunID) error {
 	}
 
 	return fmt.Errorf("run %d not found in schedule", runID)
+}
+
+func (res *Resource) GetRunCost(run *Run) (float32, error) {
+	cost, exists := res.costPerLoadUnit[run.LoadUnit]
+	if !exists {
+		return 0,
+			errors.New("unsupported load unit")
+	}
+
+	return cost * run.Load,
+		nil
 }
