@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	goerrors "github.com/TudorHulban/go-errors"
 )
 
 type RunID int64
+
+const Maintenance = RunID(0)
 
 type Resource struct {
 	Name string
@@ -98,9 +99,12 @@ func (res *Resource) GetSchedule() string {
 		intervals = append(intervals, interval)
 	}
 
-	sort.Slice(intervals, func(i, j int) bool {
-		return intervals[i].TimeStart < intervals[j].TimeStart
-	})
+	sort.Slice(
+		intervals,
+		func(i, j int) bool {
+			return intervals[i].TimeStart < intervals[j].TimeStart
+		},
+	)
 
 	var sb strings.Builder
 	sb.WriteString("Schedule:\n")
@@ -140,9 +144,12 @@ func (res *Resource) GetAvailability(searchInterval *TimeInterval) ([]TimeInterv
 		})
 	}
 
-	sort.Slice(busyUTCIntervals, func(i, j int) bool {
-		return busyUTCIntervals[i].TimeStart < busyUTCIntervals[j].TimeStart
-	})
+	sort.Slice(
+		busyUTCIntervals,
+		func(i, j int) bool {
+			return busyUTCIntervals[i].TimeStart < busyUTCIntervals[j].TimeStart
+		},
+	)
 
 	var availableIntervals []TimeInterval
 
@@ -159,23 +166,32 @@ func (res *Resource) GetAvailability(searchInterval *TimeInterval) ([]TimeInterv
 		if busy.TimeStart >= searchEnd {
 			break
 		}
+
 		hasOverlap = true
+
 		if busy.TimeStart > currentStart {
-			availableIntervals = append(availableIntervals, TimeInterval{
-				TimeStart:     currentStart + searchInterval.SecondsOffset,
-				TimeEnd:       busy.TimeStart + searchInterval.SecondsOffset,
-				SecondsOffset: searchInterval.SecondsOffset,
-			})
+			availableIntervals = append(
+				availableIntervals,
+				TimeInterval{
+					TimeStart:     currentStart + searchInterval.SecondsOffset,
+					TimeEnd:       busy.TimeStart + searchInterval.SecondsOffset,
+					SecondsOffset: searchInterval.SecondsOffset,
+				},
+			)
 		}
+
 		currentStart = max(currentStart, busy.TimeEnd)
 	}
 
 	if currentStart < searchEnd {
-		availableIntervals = append(availableIntervals, TimeInterval{
-			TimeStart:     currentStart + searchInterval.SecondsOffset,
-			TimeEnd:       searchEnd + searchInterval.SecondsOffset,
-			SecondsOffset: searchInterval.SecondsOffset,
-		})
+		availableIntervals = append(
+			availableIntervals,
+			TimeInterval{
+				TimeStart:     currentStart + searchInterval.SecondsOffset,
+				TimeEnd:       searchEnd + searchInterval.SecondsOffset,
+				SecondsOffset: searchInterval.SecondsOffset,
+			},
+		)
 	}
 
 	if !hasOverlap {
@@ -279,92 +295,4 @@ func (res *Resource) RemoveRun(runID RunID) error {
 	}
 
 	return fmt.Errorf("run %d not found in schedule", runID)
-}
-
-type paramsFindEarliestAvailableTime struct {
-	TimeStart        int64
-	MaximumTimeStart int64
-	Duration         int64
-	OffsetTask       int64
-	OffsetLocation   int64
-}
-
-// findEarliestAvailableTime returns task time not resource time.
-func (res *Resource) findEarliestAvailableTime(params *paramsFindEarliestAvailableTime) int64 {
-	offsetDifference := params.OffsetTask - params.OffsetLocation
-
-	var currentUTC int64
-
-	if params.TimeStart != 0 {
-		currentUTC = params.TimeStart + offsetDifference
-	} else {
-		currentUTC = time.Now().Unix() + offsetDifference // Default to now
-	}
-
-	maxUTCStart := params.MaximumTimeStart + offsetDifference
-
-	for utcStart := currentUTC; utcStart <= maxUTCStart; {
-		utcEnd := utcStart + params.Duration
-		if _, available := res.GetAvailability(
-			&TimeInterval{
-				TimeStart:     utcStart,
-				TimeEnd:       utcEnd,
-				SecondsOffset: offsetDifference,
-			},
-		); available {
-			return utcStart - offsetDifference
-		}
-		nextStart := utcEnd
-		for interval := range res.schedule {
-			intervalEnd := interval.GetUTCTimeEnd()
-			if intervalEnd > utcStart && intervalEnd < nextStart {
-				nextStart = intervalEnd // Earliest end
-			}
-		}
-		utcStart = nextStart
-	}
-	return _NoAvailability
-}
-
-func (res *Resource) findAtLatestAvailableTime(params *paramsFindEarliestAvailableTime) int64 {
-	if params.TimeStart > params.MaximumTimeStart {
-		return _NoAvailability
-	}
-
-	offsetDifference := params.OffsetTask - params.OffsetLocation
-
-	maxUTCStart := params.MaximumTimeStart + offsetDifference
-	currentUTCStart := params.TimeStart + offsetDifference
-
-	for currentUTCStart <= maxUTCStart {
-		currentUTCEnd := currentUTCStart + params.Duration
-
-		if _, available := res.GetAvailability(
-			&TimeInterval{
-				TimeStart:     currentUTCStart,
-				TimeEnd:       currentUTCEnd,
-				SecondsOffset: offsetDifference,
-			},
-		); available {
-			return currentUTCStart - offsetDifference // Convert back to local time
-		}
-
-		// Find next candidate start time
-		var nextBusyEnd int64
-
-		for interval := range res.schedule {
-			intervalEnd := interval.GetUTCTimeEnd()
-			if intervalEnd > currentUTCStart && intervalEnd > nextBusyEnd {
-				nextBusyEnd = intervalEnd
-			}
-		}
-
-		if nextBusyEnd > currentUTCStart {
-			currentUTCStart = nextBusyEnd // Jump to end of next busy period
-		} else {
-			currentUTCStart += params.Duration // Default increment
-		}
-	}
-
-	return _NoAvailability
 }
