@@ -94,22 +94,16 @@ func (loc *Location) CanRun(params *ParamsCanRun) (*ResponseCanRun, error) {
 			},
 		)
 
-		for ix, candidate := range candidates {
-			availSlots, available := candidate.GetAvailability(
-				&TimeInterval{
-					TimeStart:     start,
-					TimeEnd:       end,
-					SecondsOffset: loc.LocationOffset,
-				},
-			)
-			if ix == 0 && available {
-				slot := TimeInterval{
-					TimeStart:     start,
-					TimeEnd:       end,
-					SecondsOffset: loc.LocationOffset,
-				}
+		for _, candidate := range candidates {
+			targetSlot := TimeInterval{
+				TimeStart:     start,
+				TimeEnd:       end,
+				SecondsOffset: loc.LocationOffset,
+			}
 
-				possibilities[slot] = append(possibilities[slot], candidate)
+			availSlots, available := candidate.GetAvailability(&targetSlot)
+			if available {
+				possibilities[targetSlot] = append(possibilities[targetSlot], candidate)
 			} else {
 				for _, slot := range availSlots {
 					if slot.TimeEnd-slot.TimeStart >= params.TaskRun.EstimatedDuration {
@@ -157,8 +151,8 @@ func (loc *Location) CanRun(params *ParamsCanRun) (*ResponseCanRun, error) {
 			nil
 	}
 
-	for _, res := range loc.Resources[:neededCount] { // Fallback to cheapest available later
-		cost, _ := calculateTaskCost(params.TaskRun, res)
+	for _, resource := range loc.Resources[:neededCount] { // Fallback to cheapest available later
+		cost, _ := calculateTaskCost(params.TaskRun, resource)
 		totalCost = totalCost + cost
 	}
 
@@ -169,98 +163,3 @@ func (loc *Location) CanRun(params *ParamsCanRun) (*ResponseCanRun, error) {
 		},
 		nil
 }
-
-// GetRunCost returns earliest when task could start and at what cost but does not schedule the task.
-// func (loc *Location) GetRunCost(params *ParamsCanRun) (*ResponseCanRun, error) {
-// 	var earliestStartTimeOverall int64 = 0
-// 	var totalCost float32 = 0
-// 	earliestStartTimes := make(map[uint8]int64)
-// 	minCosts := make(map[uint8]float32)
-
-// 	for _, dependency := range params.TaskRun.Dependencies {
-// 		earliestStartTimeForType := _NoAvailability
-// 		var maxCostForType float32 = math.MaxFloat32
-// 		var resourceFound bool
-
-// 		for _, res := range loc.Resources {
-// 			if res.ResourceType == dependency.ResourceType {
-// 				resourceFound = true
-
-// 				// Convert task start time to resource's time zone for checking availability
-// 				checkStartTime := params.TimeStart + (params.TaskOffset - loc.LocationOffset)
-
-// 				availableStartTime := res.findEarliestAvailableTimeFrom(
-// 					&paramsFindEarliestAvailableTime{
-// 						TimeStart:      checkStartTime,
-// 						Duration:       params.TaskRun.EstimatedDuration,
-// 						OffsetTask:     params.TaskOffset,
-// 						OffsetLocation: loc.LocationOffset,
-// 					},
-// 				)
-
-// 				if availableStartTime != _NoAvailability {
-// 					costPerUnit, ok := res.costPerLoadUnit[params.TaskRun.LoadUnit]
-// 					if !ok {
-// 						continue // Resource doesn't support this load unit
-// 					}
-
-// 					cost := params.TaskRun.Load * costPerUnit
-
-// 					// Convert available start time back to task's timezone for comparison
-// 					availableStartTimeInTaskTZ := availableStartTime - (params.TaskOffset - loc.LocationOffset)
-
-// 					if earliestStartTimeForType == -1 || availableStartTimeInTaskTZ < earliestStartTimeForType {
-// 						earliestStartTimeForType = availableStartTimeInTaskTZ
-// 					}
-
-// 					if cost < maxCostForType {
-// 						maxCostForType = cost
-// 					}
-// 				}
-// 			}
-// 		}
-
-// 		if !resourceFound {
-// 			return nil,
-// 				fmt.Errorf(
-// 					"no resource of type %d found at location",
-// 					dependency.ResourceType,
-// 				)
-// 		}
-
-// 		if earliestStartTimeForType == _NoAvailability {
-// 			return nil,
-// 				fmt.Errorf(
-// 					"no available time slot found for resource type %d",
-// 					dependency.ResourceType,
-// 				)
-// 		}
-
-// 		earliestStartTimes[dependency.ResourceType] = earliestStartTimeForType
-// 		minCosts[dependency.ResourceType] = maxCostForType
-// 	}
-
-// 	// Find the latest of all earliest start times
-// 	for _, startTime := range earliestStartTimes {
-// 		if startTime > earliestStartTimeOverall {
-// 			earliestStartTimeOverall = startTime
-// 		}
-// 	}
-
-// 	for _, cost := range minCosts {
-// 		if cost != math.MaxFloat32 {
-// 			totalCost = totalCost + cost
-
-// 			continue
-// 		}
-
-// 		return nil,
-// 			errors.New("could not determine cost for all dependencies")
-// 	}
-
-// 	return &ResponseCanRun{
-// 			WhenCanStart: earliestStartTimeOverall,
-// 			Cost:         totalCost,
-// 		},
-// 		nil
-// }

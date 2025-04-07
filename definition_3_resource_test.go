@@ -109,6 +109,16 @@ func TestLifeCycleResource(t *testing.T) {
 		res.GetSchedule(),
 	)
 
+	overlapFull, noAvailability := res.GetAvailability(
+		&TimeInterval{
+			TimeStart:     1000,
+			TimeEnd:       2000,
+			SecondsOffset: 7200,
+		},
+	)
+	require.False(t, noAvailability)
+	require.Empty(t, overlapFull)
+
 	overlapsWTask, hasAvailabilityWTask := res.GetAvailability(
 		&TimeInterval{
 			TimeStart:     0,
