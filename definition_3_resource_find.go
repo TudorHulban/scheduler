@@ -15,60 +15,53 @@ func (res *Resource) findAvailableTime(params *paramsFindAvailableTime) int64 {
 	if params.TimeStart > params.MaximumTimeStart {
 		return _NoAvailability
 	}
-	offsetDifference := params.SecondsOffsetTask - params.SecondsOffsetLocation
-	currentUTCStart := params.TimeStart + offsetDifference
-	maxUTCStart := params.MaximumTimeStart + offsetDifference
 
-	for currentUTCStart <= maxUTCStart {
-		currentUTCEnd := currentUTCStart + params.SecondsDuration
-		intervals, available := res.GetAvailability(
-			&TimeInterval{
-				TimeStart:     currentUTCStart,
-				TimeEnd:       currentUTCEnd,
-				SecondsOffset: offsetDifference,
-			},
-		)
-		if available {
-			return currentUTCStart - offsetDifference
-		}
-		if len(intervals) > 0 {
-			nextUTCStart := intervals[0].TimeStart
-			if params.IsLatest {
-				nextUTCStart = intervals[len(intervals)-1].TimeStart
-			}
-			if nextUTCStart > currentUTCStart && nextUTCStart <= maxUTCStart {
-				currentUTCStart = nextUTCStart
-				continue
-			}
-		}
-		// Find next start based on strategy
-		var nextBusyEnd int64
-		if params.IsLatest {
-			// Latest: Jump to the furthest busy end
-			for interval := range res.schedule {
-				intervalEnd := interval.GetUTCTimeEnd()
-				if intervalEnd > currentUTCStart && intervalEnd > nextBusyEnd {
-					nextBusyEnd = intervalEnd
+	offsetDifference := params.SecondsOffsetTask - params.SecondsOffsetLocation
+
+	intervals, available := res.GetAvailability(
+		&TimeInterval{
+			TimeStart: params.TimeStart + offsetDifference,
+			TimeEnd:   params.MaximumTimeStart + offsetDifference + params.SecondsDuration,
+		},
+	)
+	if available {
+		return params.TimeStart // Immediate availability
+	}
+
+	if len(intervals) == 0 {
+		return _NoAvailability
+	}
+
+	if params.IsLatest {
+		for i := len(intervals) - 1; i >= 0; i-- {
+			interval := intervals[i]
+
+			if interval.TimeEnd-interval.TimeStart >= params.SecondsDuration {
+				startTaskTime := min(
+					interval.TimeEnd-offsetDifference-params.SecondsDuration,
+					params.MaximumTimeStart,
+				)
+
+				if startTaskTime >= params.TimeStart && startTaskTime <= params.MaximumTimeStart {
+					return startTaskTime
 				}
 			}
-		} else {
-			// Earliest: Jump to the earliest end of overlapping intervals
-			nextBusyEnd = maxUTCStart + 1 // Default to beyond max
-			for interval := range res.schedule {
-				intervalStart := interval.GetUTCTimeStart()
-				intervalEnd := interval.GetUTCTimeEnd()
-				if intervalStart <= currentUTCEnd && intervalEnd > currentUTCStart {
-					if intervalEnd < nextBusyEnd {
-						nextBusyEnd = intervalEnd
-					}
-				}
-			}
-		}
-		if nextBusyEnd > currentUTCStart && nextBusyEnd <= maxUTCStart {
-			currentUTCStart = nextBusyEnd
-		} else {
-			currentUTCStart += params.SecondsDuration
 		}
 	}
+
+	for _, interval := range intervals {
+		if interval.TimeEnd-interval.TimeStart >= params.SecondsDuration {
+			startTaskTime := interval.TimeStart - offsetDifference
+
+			if startTaskTime >= params.TimeStart && startTaskTime <= params.MaximumTimeStart {
+				if params.IsLatest {
+					continue // Skip to find latest
+				}
+
+				return startTaskTime
+			}
+		}
+	}
+
 	return _NoAvailability
 }

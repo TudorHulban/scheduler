@@ -117,7 +117,7 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 			return &ResponseCanRun{
 					WhenCanStart: _ScheduledForStart,
 					Cost:         totalCost,
-					WasScheduled: earliest == params.TimeStart,
+					WasScheduled: true,
 				},
 				nil
 		}
@@ -125,7 +125,7 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 		return &ResponseCanRun{
 				WhenCanStart: earliest,
 				Cost:         totalCost,
-				WasScheduled: earliest == params.TimeStart,
+				WasScheduled: false,
 			},
 			nil
 	}
@@ -135,14 +135,15 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 
 	for _, res := range loc.Resources {
 		if slices.Contains(resourceTypesNeeded, res.ResourceType) {
-			when := res.findAvailableTime(&paramsFindAvailableTime{
-				TimeStart:             start,
-				MaximumTimeStart:      end + 3600,
-				SecondsDuration:       params.TaskRun.EstimatedDuration,
-				SecondsOffsetTask:     params.SecondsOffset,
-				SecondsOffsetLocation: loc.LocationOffset,
-				IsLatest:              false,
-			})
+			when := res.findAvailableTime(
+				&paramsFindAvailableTime{
+					TimeStart:             start,
+					MaximumTimeStart:      end + params.TaskRun.EstimatedDuration,
+					SecondsDuration:       params.TaskRun.EstimatedDuration,
+					SecondsOffsetTask:     params.SecondsOffset,
+					SecondsOffsetLocation: loc.LocationOffset,
+				},
+			)
 
 			if when != _NoAvailability {
 				whenTaskTime := when - offsetDifference

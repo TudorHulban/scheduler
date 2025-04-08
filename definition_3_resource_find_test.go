@@ -5,8 +5,6 @@ import (
 )
 
 func TestFindAvailableTime(t *testing.T) {
-	var now int64 = 10000
-
 	tests := []struct {
 		name           string
 		schedule       map[TimeInterval]RunID
@@ -17,8 +15,8 @@ func TestFindAvailableTime(t *testing.T) {
 			name:     "1. Empty schedule - Immediately available",
 			schedule: map[TimeInterval]RunID{},
 			params: paramsFindAvailableTime{
-				MaximumTimeStart:      now + oneDay,
 				TimeStart:             now,
+				MaximumTimeStart:      now + oneDay,
 				SecondsDuration:       oneHour,
 				SecondsOffsetTask:     0, // UTC
 				SecondsOffsetLocation: 0, // UTC
@@ -32,7 +30,7 @@ func TestFindAvailableTime(t *testing.T) {
 				{
 					TimeStart: now,
 					TimeEnd:   now + oneHour,
-				}: 1,
+				}: Maintenance,
 			},
 			params: paramsFindAvailableTime{
 				TimeStart:        now,
@@ -47,10 +45,10 @@ func TestFindAvailableTime(t *testing.T) {
 			schedule: map[TimeInterval]RunID{},
 			params: paramsFindAvailableTime{
 				TimeStart:             now,
-				MaximumTimeStart:      now + 7200, // 2h window
-				SecondsDuration:       3600,
-				SecondsOffsetTask:     7200, // UTC+2
-				SecondsOffsetLocation: 0,    // UTC
+				MaximumTimeStart:      now + 2*oneHour,
+				SecondsDuration:       oneHour,
+				SecondsOffsetTask:     2 * oneHour, // UTC+2
+				SecondsOffsetLocation: 0,           // UTC
 			},
 
 			expectedResult: now, // request time
@@ -58,42 +56,42 @@ func TestFindAvailableTime(t *testing.T) {
 		{
 			name: "4. Multiple busy periods - earliest available",
 			schedule: map[TimeInterval]RunID{
-				{TimeStart: now, TimeEnd: now + 3600}:         1,
-				{TimeStart: now + 7200, TimeEnd: now + 10800}: 2,
+				{TimeStart: now, TimeEnd: now + oneHour}:               Maintenance,
+				{TimeStart: now + 2*oneHour, TimeEnd: now + 3*oneHour}: Maintenance,
 			},
 			params: paramsFindAvailableTime{
 				TimeStart:        now,
-				MaximumTimeStart: now + 86400,
-				SecondsDuration:  1800, // 30min slot
+				MaximumTimeStart: now + oneDay,
+				SecondsDuration:  halfHour,
 			},
 
-			expectedResult: now + 3600,
+			expectedResult: now + oneHour,
 		},
 		{
 			name: "5. Multiple busy periods - latest available",
 			schedule: map[TimeInterval]RunID{
-				{TimeStart: now, TimeEnd: now + 3600}:         1,
-				{TimeStart: now + 7200, TimeEnd: now + 10800}: 2,
+				{TimeStart: now, TimeEnd: now + oneHour}:               Maintenance,
+				{TimeStart: now + 2*oneHour, TimeEnd: now + 3*oneHour}: Maintenance,
 			},
 			params: paramsFindAvailableTime{
 				TimeStart:        now,
-				MaximumTimeStart: now + 86400,
-				SecondsDuration:  1800, // 30min slot
+				MaximumTimeStart: now + oneDay,
+				SecondsDuration:  halfHour,
 
 				IsLatest: true,
 			},
 
-			expectedResult: now + 84600,
+			expectedResult: now + oneDay,
 		},
 		{
 			name: "6. No availability - Exceeds maximum time",
 			schedule: map[TimeInterval]RunID{
-				{TimeStart: now, TimeEnd: now + 86400}: Maintenance,
+				{TimeStart: now, TimeEnd: now + oneDay}: Maintenance,
 			},
 			params: paramsFindAvailableTime{
 				TimeStart:        now,
-				MaximumTimeStart: now + 3600,
-				SecondsDuration:  3600,
+				MaximumTimeStart: now + oneHour,
+				SecondsDuration:  oneHour,
 			},
 
 			expectedResult: _NoAvailability,
@@ -104,7 +102,7 @@ func TestFindAvailableTime(t *testing.T) {
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
-				res := &Resource{
+				res := Resource{
 					schedule: tt.schedule,
 				}
 
