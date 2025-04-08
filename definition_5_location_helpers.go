@@ -26,6 +26,7 @@ func populatePossibilities(params *paramsPopulatePossibilities) map[TimeInterval
 
 		for ix, candidate := range candidates {
 			availSlots, available := candidate.GetAvailability(&params.TimeInterval)
+
 			if ix == 0 && available {
 				result[params.TimeInterval] = append(result[params.TimeInterval], candidate)
 

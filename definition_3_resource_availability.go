@@ -10,11 +10,14 @@ func (res *Resource) GetAvailability(searchInterval *TimeInterval) ([]TimeInterv
 	var busyUTCIntervals []TimeInterval
 
 	for scheduledInterval := range res.schedule {
-		busyUTCIntervals = append(busyUTCIntervals, TimeInterval{
-			TimeStart:     scheduledInterval.GetUTCTimeStart(),
-			TimeEnd:       scheduledInterval.GetUTCTimeEnd(),
-			SecondsOffset: scheduledInterval.SecondsOffset,
-		})
+		busyUTCIntervals = append(
+			busyUTCIntervals,
+			TimeInterval{
+				TimeStart:     scheduledInterval.GetUTCTimeStart(),
+				TimeEnd:       scheduledInterval.GetUTCTimeEnd(),
+				SecondsOffset: scheduledInterval.SecondsOffset,
+			},
+		)
 	}
 
 	sort.Slice(
@@ -36,6 +39,7 @@ func (res *Resource) GetAvailability(searchInterval *TimeInterval) ([]TimeInterv
 		if busy.TimeEnd <= currentStart {
 			continue
 		}
+
 		if busy.TimeStart >= searchEnd {
 			break
 		}
@@ -68,8 +72,10 @@ func (res *Resource) GetAvailability(searchInterval *TimeInterval) ([]TimeInterv
 	}
 
 	if !hasOverlap {
-		return nil, true // Fully available if no overlap
+		return nil,
+			true // Fully available if no overlap
 	}
 
-	return availableIntervals, false
+	return availableIntervals,
+		false
 }

@@ -135,6 +135,7 @@ type ParamsRun struct {
 	ID RunID
 }
 
+// ID = 0 reserved for Maintenance.
 func (res *Resource) AddRun(_ context.Context, params *ParamsRun) ([]TimeInterval, error) {
 	if params.TimeStart >= params.TimeEnd {
 		return nil,
