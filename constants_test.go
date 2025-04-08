@@ -5,4 +5,5 @@ const (
 
 	halfHour = int64(1800)
 	oneHour  = int64(3600)
+	oneDay   = int64(86400)
 )

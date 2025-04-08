@@ -1,9 +1,7 @@
 package scheduler
 
 import (
-	"fmt"
 	"slices"
-	"sort"
 
 	goerrors "github.com/TudorHulban/go-errors"
 	"github.com/asaskevich/govalidator"
@@ -57,18 +55,20 @@ type ResponseCanRun struct {
 	WasScheduled bool
 }
 
-// CanSchedule returns zero for WhenCanStart if it can run within passed nterval and
+// CanSchedule returns zero for WhenCanStart if it can run within passed interval and
 // also schedules the task to the cheapest available resource and provides the cost.
 //
 // If it cannot run within interval, it provides the timestamp
 // from which it could in WhenCanStart and the cost of this run.
 func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) {
 	if params.TimeEnd-params.TimeStart < params.TaskRun.EstimatedDuration {
-		return &ResponseCanRun{
-			WhenCanStart: params.TimeEnd,
-			Cost:         0,
-			WasScheduled: false,
-		}, nil
+		return nil,
+			goerrors.ErrValidation{
+				Caller: "CanSchedule",
+				Issue: goerrors.ErrInvalidInput{
+					InputName: "ParamsCanRun - interval too short",
+				},
+			}
 	}
 
 	resourceTypeCandidates := make(map[uint8][]*Resource)
@@ -80,72 +80,59 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 		}
 	}
 
-	possibilities := make(map[TimeInterval][]*Resource)
-
 	offsetDifference := params.SecondsOffset - loc.LocationOffset
 	start := params.TimeStart + offsetDifference
 	end := params.TimeEnd + offsetDifference
 
-	for _, candidates := range resourceTypeCandidates {
-		sort.Slice(
-			candidates,
-			func(i, j int) bool {
-				return candidates[i].costPerLoadUnit[params.TaskRun.LoadUnit] < candidates[j].costPerLoadUnit[params.TaskRun.LoadUnit]
-			},
-		)
-
-		for _, candidate := range candidates {
-			targetSlot := TimeInterval{
+	possibilities := populatePossibilities(
+		&paramsPopulatePossibilities{
+			Candidates: resourceTypeCandidates,
+			TimeInterval: TimeInterval{
 				TimeStart:     start,
 				TimeEnd:       end,
 				SecondsOffset: loc.LocationOffset,
-			}
-
-			availSlots, available := candidate.GetAvailability(&targetSlot)
-			if available {
-				possibilities[targetSlot] = append(possibilities[targetSlot], candidate)
-			} else {
-				for _, slot := range availSlots {
-					if slot.TimeEnd-slot.TimeStart >= params.TaskRun.EstimatedDuration {
-						possibilities[slot] = append(possibilities[slot], candidate)
-					}
-				}
-			}
-		}
-	}
-
-	earliest, bestResources := findEarliestSlot(possibilities, len(resourceTypesNeeded), offsetDifference)
-
-	fmt.Println(
-		len(bestResources),
-		bestResources[0].ID,
-		possibilities,
+			},
+			Duration: params.TaskRun.EstimatedDuration,
+		},
 	)
+
+	earliest, selectedResources := findEarliestSlot(possibilities, len(resourceTypesNeeded), offsetDifference)
 
 	var totalCost float32
 	if earliest != _NoAvailability {
-		for _, resource := range bestResources {
+		for _, resource := range selectedResources {
 			cost, _ := calculateTaskCost(params.TaskRun, resource)
 			totalCost = totalCost + cost
 		}
+
 		if earliest == params.TimeStart {
-			for _, resource := range bestResources {
+			for _, resource := range selectedResources {
 				resource.schedule[TimeInterval{
 					TimeStart:     earliest + (params.SecondsOffset - loc.LocationOffset),
 					TimeEnd:       earliest + params.TaskRun.EstimatedDuration + (params.SecondsOffset - loc.LocationOffset),
 					SecondsOffset: loc.LocationOffset,
 				}] = RunID(params.TaskRun.ID)
 			}
+
+			return &ResponseCanRun{
+					WhenCanStart: _ScheduledForStart,
+					Cost:         totalCost,
+					WasScheduled: earliest == params.TimeStart,
+				},
+				nil
 		}
+
 		return &ResponseCanRun{
-			WhenCanStart: earliest - params.TimeStart,
-			Cost:         totalCost,
-			WasScheduled: earliest == params.TimeStart,
-		}, nil
+				WhenCanStart: earliest,
+				Cost:         totalCost,
+				WasScheduled: earliest == params.TimeStart,
+			},
+			nil
 	}
 
-	earliestFallback := int64(_NoAvailability)
+	earliestFallback := _NoAvailability
 	var bestFallbackRes *Resource
+
 	for _, res := range loc.Resources {
 		if slices.Contains(resourceTypesNeeded, res.ResourceType) {
 			when := res.findAvailableTime(&paramsFindAvailableTime{
@@ -156,6 +143,7 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 				SecondsOffsetLocation: loc.LocationOffset,
 				IsLatest:              false,
 			})
+
 			if when != _NoAvailability {
 				whenTaskTime := when - offsetDifference
 				if earliestFallback == _NoAvailability || whenTaskTime < earliestFallback {
@@ -165,19 +153,23 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 			}
 		}
 	}
+
 	if earliestFallback != _NoAvailability {
 		cost, _ := calculateTaskCost(params.TaskRun, bestFallbackRes)
 		totalCost = cost
+
 		return &ResponseCanRun{
-			WhenCanStart: earliestFallback - params.TimeStart,
-			Cost:         totalCost,
-			WasScheduled: false,
-		}, nil
+				WhenCanStart: earliestFallback - params.TimeStart,
+				Cost:         totalCost,
+				WasScheduled: true,
+			},
+			nil
 	}
 
 	return &ResponseCanRun{
-		WhenCanStart: params.TimeEnd,
-		Cost:         totalCost,
-		WasScheduled: false,
-	}, nil
+			WhenCanStart: params.TimeEnd,
+			Cost:         totalCost,
+			WasScheduled: false,
+		},
+		nil
 }

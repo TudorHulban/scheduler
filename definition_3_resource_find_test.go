@@ -17,11 +17,11 @@ func TestFindAvailableTime(t *testing.T) {
 			name:     "1. Empty schedule - Immediately available",
 			schedule: map[TimeInterval]RunID{},
 			params: paramsFindAvailableTime{
-				MaximumTimeStart:      now + 86400, // 24h window
+				MaximumTimeStart:      now + oneDay,
 				TimeStart:             now,
-				SecondsDuration:       3600, // 1h duration
-				SecondsOffsetTask:     0,    // UTC
-				SecondsOffsetLocation: 0,    // UTC
+				SecondsDuration:       oneHour,
+				SecondsOffsetTask:     0, // UTC
+				SecondsOffsetLocation: 0, // UTC
 			},
 
 			expectedResult: now,
@@ -31,16 +31,16 @@ func TestFindAvailableTime(t *testing.T) {
 			schedule: map[TimeInterval]RunID{
 				{
 					TimeStart: now,
-					TimeEnd:   now + 3600,
+					TimeEnd:   now + oneHour,
 				}: 1,
 			},
 			params: paramsFindAvailableTime{
 				TimeStart:        now,
-				MaximumTimeStart: now + 86400,
-				SecondsDuration:  3600,
+				MaximumTimeStart: now + oneDay,
+				SecondsDuration:  oneHour,
 			},
 
-			expectedResult: now + 3600, // Next slot after busy period
+			expectedResult: now + oneHour, // Next slot after busy period
 		},
 		{
 			name:     "3. Timezone conversion (task UTC+2, resource UTC)",
