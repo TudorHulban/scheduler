@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"slices"
 	"sort"
 
@@ -56,19 +57,18 @@ type ResponseCanRun struct {
 	WasScheduled bool
 }
 
-// CanRun returns zero for WhenCanStart if it can run within passed nterval and
+// CanSchedule returns zero for WhenCanStart if it can run within passed nterval and
 // also schedules the task to the cheapest available resource and provides the cost.
 //
 // If it cannot run within interval, it provides the timestamp
 // from which it could in WhenCanStart and the cost of this run.
-func (loc *Location) CanRun(params *ParamsCanRun) (*ResponseCanRun, error) {
+func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) {
 	if params.TimeEnd-params.TimeStart < params.TaskRun.EstimatedDuration {
 		return &ResponseCanRun{
-				WhenCanStart: params.TimeEnd,
-				Cost:         0,
-				WasScheduled: false,
-			},
-			nil
+			WhenCanStart: params.TimeEnd,
+			Cost:         0,
+			WasScheduled: false,
+		}, nil
 	}
 
 	resourceTypeCandidates := make(map[uint8][]*Resource)
@@ -114,52 +114,70 @@ func (loc *Location) CanRun(params *ParamsCanRun) (*ResponseCanRun, error) {
 		}
 	}
 
-	earliest := int64(_NoAvailability)
+	earliest, bestResources := findEarliestSlot(possibilities, len(resourceTypesNeeded), offsetDifference)
 
-	var bestResources []*Resource
-	neededCount := len(resourceTypesNeeded)
-
-	for slot, resources := range possibilities {
-		if len(resources) >= neededCount {
-			startTaskTime := slot.TimeStart - offsetDifference
-
-			if earliest == _NoAvailability || startTaskTime < earliest {
-				earliest = startTaskTime
-				bestResources = resources[:neededCount] // Take only needed count
-			}
-		}
-	}
+	fmt.Println(
+		len(bestResources),
+		bestResources[0].ID,
+		possibilities,
+	)
 
 	var totalCost float32
 	if earliest != _NoAvailability {
 		for _, resource := range bestResources {
 			cost, _ := calculateTaskCost(params.TaskRun, resource)
 			totalCost = totalCost + cost
-
-			resource.schedule[TimeInterval{
-				TimeStart:     earliest + (params.SecondsOffset - loc.LocationOffset),
-				TimeEnd:       earliest + params.TaskRun.EstimatedDuration + (params.SecondsOffset - loc.LocationOffset),
-				SecondsOffset: loc.LocationOffset,
-			}] = RunID(params.TaskRun.ID)
 		}
-
+		if earliest == params.TimeStart {
+			for _, resource := range bestResources {
+				resource.schedule[TimeInterval{
+					TimeStart:     earliest + (params.SecondsOffset - loc.LocationOffset),
+					TimeEnd:       earliest + params.TaskRun.EstimatedDuration + (params.SecondsOffset - loc.LocationOffset),
+					SecondsOffset: loc.LocationOffset,
+				}] = RunID(params.TaskRun.ID)
+			}
+		}
 		return &ResponseCanRun{
-				WhenCanStart: earliest - params.TimeStart, // Relative to TimeStart
-				Cost:         totalCost,
-				WasScheduled: true,
-			},
-			nil
+			WhenCanStart: earliest - params.TimeStart,
+			Cost:         totalCost,
+			WasScheduled: earliest == params.TimeStart,
+		}, nil
 	}
 
-	for _, resource := range loc.Resources[:neededCount] { // Fallback to cheapest available later
-		cost, _ := calculateTaskCost(params.TaskRun, resource)
-		totalCost = totalCost + cost
+	earliestFallback := int64(_NoAvailability)
+	var bestFallbackRes *Resource
+	for _, res := range loc.Resources {
+		if slices.Contains(resourceTypesNeeded, res.ResourceType) {
+			when := res.findAvailableTime(&paramsFindAvailableTime{
+				TimeStart:             start,
+				MaximumTimeStart:      end + 3600,
+				SecondsDuration:       params.TaskRun.EstimatedDuration,
+				SecondsOffsetTask:     params.SecondsOffset,
+				SecondsOffsetLocation: loc.LocationOffset,
+				IsLatest:              false,
+			})
+			if when != _NoAvailability {
+				whenTaskTime := when - offsetDifference
+				if earliestFallback == _NoAvailability || whenTaskTime < earliestFallback {
+					earliestFallback = whenTaskTime
+					bestFallbackRes = res
+				}
+			}
+		}
+	}
+	if earliestFallback != _NoAvailability {
+		cost, _ := calculateTaskCost(params.TaskRun, bestFallbackRes)
+		totalCost = cost
+		return &ResponseCanRun{
+			WhenCanStart: earliestFallback - params.TimeStart,
+			Cost:         totalCost,
+			WasScheduled: false,
+		}, nil
 	}
 
 	return &ResponseCanRun{
-			WhenCanStart: params.TimeEnd,
-			Cost:         totalCost,
-			WasScheduled: false,
-		},
-		nil
+		WhenCanStart: params.TimeEnd,
+		Cost:         totalCost,
+		WasScheduled: false,
+	}, nil
 }

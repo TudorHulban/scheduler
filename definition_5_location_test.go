@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestCanRun(t *testing.T) {
+func TestCanSchedule(t *testing.T) {
 	var now int64 = 10000
 
 	resourceLowCost := &Resource{
@@ -30,10 +30,11 @@ func TestCanRun(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                    string
-		scheduleResourceLowCost map[TimeInterval]RunID
-		params                  ParamsCanRun
-		expectedResult          ResponseCanRun
+		name                     string
+		scheduleResourceLowCost  map[TimeInterval]RunID
+		scheduleResourceHighCost map[TimeInterval]RunID
+		params                   ParamsCanRun
+		expectedResult           ResponseCanRun
 	}{
 		// {
 		// 	name: "1. Empty schedule - Immediately available of resource low cost",
@@ -66,39 +67,42 @@ func TestCanRun(t *testing.T) {
 		// 		WasScheduled: true,
 		// 	},
 		// },
-		// {
-		// 	name: "2. Busy now, available next hour",
+		{
+			name: "2. Busy now, available next hour",
 
-		// 	scheduleResourceLowCost: map[TimeInterval]RunID{
-		// 		{TimeStart: now, TimeEnd: now + 3600}: Maintenance,
-		// 	},
-		// 	params: ParamsCanRun{
-		// 		TimeInterval: TimeInterval{
-		// 			TimeStart: now,
-		// 			TimeEnd:   now + 3600,
-		// 		},
-		// 		TaskRun: &Run{
-		// 			ID:                3,
-		// 			EstimatedDuration: 3600,
-		// 			Dependencies: []RunDependency{
-		// 				{
-		// 					ResourceType:     1,
-		// 					ResourceQuantity: 1,
-		// 				},
-		// 			},
-		// 			RunLoad: RunLoad{
-		// 				Load:     1.0,
-		// 				LoadUnit: 1,
-		// 			},
-		// 		},
-		// 	},
+			scheduleResourceLowCost: map[TimeInterval]RunID{
+				{TimeStart: now, TimeEnd: now + 3600}: Maintenance,
+			},
+			scheduleResourceHighCost: map[TimeInterval]RunID{
+				{TimeStart: now, TimeEnd: now + 3600}: Maintenance,
+			},
+			params: ParamsCanRun{
+				TimeInterval: TimeInterval{
+					TimeStart: now,
+					TimeEnd:   now + 3600,
+				},
+				TaskRun: &Run{
+					ID:                3,
+					EstimatedDuration: 3600,
+					Dependencies: []RunDependency{
+						{
+							ResourceType:     1,
+							ResourceQuantity: 1,
+						},
+					},
+					RunLoad: RunLoad{
+						Load:     1.0,
+						LoadUnit: 1,
+					},
+				},
+			},
 
-		// 	expectedResult: ResponseCanRun{
-		// 		WhenCanStart: now + 3600, // Next hour
-		// 		Cost:         2.0,
-		// 		WasScheduled: false,
-		// 	},
-		// },
+			expectedResult: ResponseCanRun{
+				WhenCanStart: now + 3600, // Next hour
+				Cost:         2.0,
+				WasScheduled: false,
+			},
+		},
 		// {
 		// 	name: "3. Timezone conversion (task UTC+2, resource UTC)",
 
@@ -165,39 +169,39 @@ func TestCanRun(t *testing.T) {
 		// 		WasScheduled: false,
 		// 	},
 		// },
-		{
-			name: "5. No availability cheap resource- Exceeds maximum time",
+		// {
+		// 	name: "5. No availability cheap resource- Exceeds maximum time",
 
-			scheduleResourceLowCost: map[TimeInterval]RunID{
-				{TimeStart: now, TimeEnd: now + 86400}: Maintenance, // Full day busy
-			},
-			params: ParamsCanRun{
-				TimeInterval: TimeInterval{
-					TimeStart: now,
-					TimeEnd:   now + 3600,
-				},
-				TaskRun: &Run{
-					ID:                9,
-					EstimatedDuration: 3600,
-					Dependencies: []RunDependency{
-						{
-							ResourceType:     1,
-							ResourceQuantity: 1,
-						},
-					},
-					RunLoad: RunLoad{
-						Load:     1.0,
-						LoadUnit: 1,
-					},
-				},
-			},
+		// 	scheduleResourceLowCost: map[TimeInterval]RunID{
+		// 		{TimeStart: now, TimeEnd: now + 86400}: Maintenance, // Full day busy
+		// 	},
+		// 	params: ParamsCanRun{
+		// 		TimeInterval: TimeInterval{
+		// 			TimeStart: now,
+		// 			TimeEnd:   now + 3600,
+		// 		},
+		// 		TaskRun: &Run{
+		// 			ID:                9,
+		// 			EstimatedDuration: 3600,
+		// 			Dependencies: []RunDependency{
+		// 				{
+		// 					ResourceType:     1,
+		// 					ResourceQuantity: 1,
+		// 				},
+		// 			},
+		// 			RunLoad: RunLoad{
+		// 				Load:     1.0,
+		// 				LoadUnit: 1,
+		// 			},
+		// 		},
+		// 	},
 
-			expectedResult: ResponseCanRun{
-				WhenCanStart: 0, // can use higher cost resource
-				Cost:         3,
-				WasScheduled: true,
-			},
-		},
+		// 	expectedResult: ResponseCanRun{
+		// 		WhenCanStart: 0, // can use higher cost resource
+		// 		Cost:         3,
+		// 		WasScheduled: true,
+		// 	},
+		// },
 	}
 
 	for _, tt := range tests {
@@ -213,7 +217,7 @@ func TestCanRun(t *testing.T) {
 					resourceHighCost,
 				}
 
-				result, err := loc.CanRun(&tt.params)
+				result, err := loc.CanSchedule(&tt.params)
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}

@@ -24,11 +24,6 @@ type Resource struct {
 	ResourceType uint8
 }
 
-type resourceOption struct {
-	res  *Resource
-	cost float32
-}
-
 type ParamsNewResource struct {
 	Name            string
 	CostPerLoadUnit map[uint8]float32
