@@ -15,11 +15,9 @@ func TestFindAvailableTime(t *testing.T) {
 			name:     "1. Empty schedule - Immediately available",
 			schedule: map[TimeInterval]RunID{},
 			params: paramsFindAvailableTime{
-				TimeStart:             now,
-				MaximumTimeStart:      now + oneDay,
-				SecondsDuration:       oneHour,
-				SecondsOffsetTask:     0, // UTC
-				SecondsOffsetLocation: 0, // UTC
+				TimeStart:        now,
+				MaximumTimeStart: now + oneDay,
+				SecondsDuration:  oneHour,
 			},
 
 			expectedResult: now,

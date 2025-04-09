@@ -1,6 +1,11 @@
 package scheduler
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestFindEarliestSlot(t *testing.T) {
 	var now int64 = 10000
@@ -17,33 +22,69 @@ func TestFindEarliestSlot(t *testing.T) {
 		{
 			name: "1. Busy now, cheapest later",
 			possibilities: map[TimeInterval][]*Resource{
-				{TimeStart: now, TimeEnd: now + 3600}: {
+				{TimeStart: now, TimeEnd: now + oneHour}: {
 					&Resource{ID: 2, costPerLoadUnit: map[uint8]float32{1: 3.0}}, // High-cost now
 				},
-				{TimeStart: now + 3600, TimeEnd: now + 7200}: {
-					&Resource{ID: 1, costPerLoadUnit: map[uint8]float32{1: 2.0}}, // Cheapest later
+				{TimeStart: now + oneHour, TimeEnd: now + 2*oneHour}: {
+					&Resource{ID: 1, costPerLoadUnit: map[uint8]float32{1: 2.0}}, // Cheaper later
 					&Resource{ID: 2, costPerLoadUnit: map[uint8]float32{1: 3.0}},
 				},
 			},
-			neededCount:            1,
-			offsetDifference:       0,
-			expectedTime:           now + 3600, // 13600
+			neededCount:      1,
+			offsetDifference: 0,
+
+			expectedTime:           now + oneHour,
 			expectedResourcesCount: 1,
 			expectedCost:           2.0,
 		},
 		{
-			name: "2. Busy now, available next hour",
+			name: "2. Busy now, cheaper later, multiple resources",
 			possibilities: map[TimeInterval][]*Resource{
-				{TimeStart: now + 3600, TimeEnd: now + 7200}: {
-					&Resource{costPerLoadUnit: map[uint8]float32{1: 2.0}}, // Cheapest
+				{TimeStart: now, TimeEnd: now + oneHour}: {
+					&Resource{ID: 2, costPerLoadUnit: map[uint8]float32{1: 3.0}},
+					&Resource{ID: 3, costPerLoadUnit: map[uint8]float32{1: 3.0}},
+				},
+				{TimeStart: now + oneHour, TimeEnd: now + 2*oneHour}: {
+					&Resource{ID: 1, costPerLoadUnit: map[uint8]float32{1: 2.0}},
+					&Resource{ID: 2, costPerLoadUnit: map[uint8]float32{1: 3.0}},
+				},
+			},
+			neededCount:      2,
+			offsetDifference: 0,
+
+			expectedTime:           now + oneHour,
+			expectedResourcesCount: 2,
+			expectedCost:           5.0,
+		},
+		{
+			name: "3. Busy now, available next hour",
+			possibilities: map[TimeInterval][]*Resource{
+				{TimeStart: now + oneHour, TimeEnd: now + 2*oneHour}: {
+					&Resource{costPerLoadUnit: map[uint8]float32{1: 2.0}},
 					&Resource{costPerLoadUnit: map[uint8]float32{1: 3.0}},
 				},
 			},
-			neededCount:            1,
-			offsetDifference:       0,
-			expectedTime:           now + 3600, // 13600
+			neededCount:      1,
+			offsetDifference: 0,
+
+			expectedTime:           now + oneHour,
 			expectedResourcesCount: 1,
-			expectedCost:           2.0, // Cheapest resource
+			expectedCost:           2.0, // Cheaper resource
+		},
+		{
+			name: "4. Busy now, available next hour, multiple resources",
+			possibilities: map[TimeInterval][]*Resource{
+				{TimeStart: now + oneHour, TimeEnd: now + 2*oneHour}: {
+					&Resource{costPerLoadUnit: map[uint8]float32{1: 2.0}},
+					&Resource{costPerLoadUnit: map[uint8]float32{1: 3.0}},
+				},
+			},
+			neededCount:      2,
+			offsetDifference: 0,
+
+			expectedTime:           now + oneHour,
+			expectedResourcesCount: 2,
+			expectedCost:           5.0,
 		},
 	}
 
@@ -67,17 +108,34 @@ func TestFindEarliestSlot(t *testing.T) {
 					)
 				}
 
-				if len(resources) > 0 {
-					cost := resources[0].costPerLoadUnit[1] // Assuming LoadUnit 1
+				require.Len(t,
+					resources,
+					tt.expectedResourcesCount,
 
-					if cost != tt.expectedCost {
-						t.Errorf(
-							"expected cost: %f, got cost: %f",
-							tt.expectedCost,
-							cost,
-						)
-					}
+					fmt.Sprintf(
+						"expected resource count: %d, got: %d",
+
+						tt.expectedResourcesCount,
+						len(resources),
+					),
+				)
+
+				var totalCost float32
+
+				for _, resource := range resources {
+					totalCost = totalCost + resource.costPerLoadUnit[1]
 				}
+
+				require.Equal(t,
+					tt.expectedCost,
+					totalCost,
+
+					fmt.Sprintf(
+						"expected cost: %f, got cost: %f",
+						tt.expectedCost,
+						totalCost,
+					),
+				)
 			},
 		)
 	}

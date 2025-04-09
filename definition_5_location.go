@@ -28,7 +28,7 @@ func NewLocation(params *ParamsNewLocation) (*Location, error) {
 		return nil,
 			goerrors.ErrServiceValidation{
 				ServiceName: "Organigram",
-				Caller:      "CreateCompany",
+				Caller:      "NewLocation",
 				Issue:       errValidation,
 			}
 	}
@@ -108,8 +108,8 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 		if earliest == params.TimeStart {
 			for _, resource := range selectedResources {
 				resource.schedule[TimeInterval{
-					TimeStart:     earliest + (params.SecondsOffset - loc.LocationOffset),
-					TimeEnd:       earliest + params.TaskRun.EstimatedDuration + (params.SecondsOffset - loc.LocationOffset),
+					TimeStart:     earliest + offsetDifference,
+					TimeEnd:       earliest + params.TaskRun.EstimatedDuration + offsetDifference,
 					SecondsOffset: loc.LocationOffset,
 				}] = RunID(params.TaskRun.ID)
 			}
