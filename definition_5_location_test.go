@@ -286,14 +286,21 @@ func TestCanSchedule(t *testing.T) {
 			func(t *testing.T) {
 				// Reset resources and apply schedule to resource1
 				resourceLowCost.schedule = tt.scheduleResourceLowCost
-				resourceHighCost.schedule = make(map[TimeInterval]RunID)
+				resourceHighCost.schedule = ternary(
+					len(tt.scheduleResourceHighCost) > 0,
+
+					tt.scheduleResourceHighCost,
+					make(map[TimeInterval]RunID),
+				)
 
 				location.Resources = []*Resource{
 					resourceLowCost,
 					resourceHighCost,
 				}
 
-				result, err := location.CanSchedule(&tt.params)
+				result, err := location.CanSchedule(
+					&tt.params,
+				)
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}

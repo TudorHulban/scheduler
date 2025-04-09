@@ -18,8 +18,6 @@ func populatePossibilities(params *paramsPopulatePossibilities) map[TimeInterval
 	result := make(map[TimeInterval][]*Resource)
 
 	for resourceType, candidates := range params.Candidates {
-		needed := int(params.ResourcesNeededPerType[resourceType])
-
 		sort.Slice(
 			candidates,
 			func(i, j int) bool {
@@ -27,26 +25,31 @@ func populatePossibilities(params *paramsPopulatePossibilities) map[TimeInterval
 			},
 		)
 
-		for ix, candidate := range candidates {
+		resourcesNeeded := int(params.ResourcesNeededPerType[resourceType])
+
+		for _, candidate := range candidates {
 			availSlots, available := candidate.GetAvailability(&params.TimeInterval)
 
-			if available && ix < needed { // Cheapest up to needed count
+			if available {
 				current := result[params.TimeInterval]
-				if len(current) < needed {
+				if len(current) < resourcesNeeded {
 					result[params.TimeInterval] = append(current, candidate)
 				}
 
 				continue
 			}
 
-			if !available {
-				for _, slot := range availSlots {
-					if slot.TimeEnd-slot.TimeStart >= params.Duration {
-						current := result[slot]
+			for _, slot := range availSlots {
+				if slot.TimeEnd-slot.TimeStart >= params.Duration {
+					normalizedSlot := TimeInterval{
+						TimeStart:     slot.TimeStart,
+						TimeEnd:       slot.TimeEnd,
+						SecondsOffset: params.TimeInterval.SecondsOffset, // Match input offset
+					}
 
-						if len(current) < needed { // Limit to needed
-							result[slot] = append(current, candidate)
-						}
+					current := result[normalizedSlot]
+					if len(current) < resourcesNeeded {
+						result[normalizedSlot] = append(current, candidate)
 					}
 				}
 			}

@@ -115,8 +115,6 @@ type ResponseCanRun struct {
 // If it cannot run at TimeStart, it provides the timestamp
 // from which it could in WhenCanStart and the cost of this run.
 func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) {
-	defer traceExitWMarker(params.String())
-
 	if params.TimeEnd-params.TimeStart < params.TaskRun.EstimatedDuration {
 		return nil,
 			goerrors.ErrValidation{
@@ -155,10 +153,6 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 			},
 			Duration: params.TaskRun.EstimatedDuration,
 		},
-	)
-
-	fmt.Println(
-		possibilities,
 	)
 
 	noNeeded := resourcesNeededPerType[1] // Simplify - only one type of resources for now.
@@ -239,7 +233,12 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 
 	if earliestFallback != _NoAvailability && len(fallbackResources) == needed {
 		return &ResponseCanRun{
-				WhenCanStart: earliestFallback - params.TimeStart,
+				WhenCanStart: ternary(
+					earliestFallback == params.TimeStart,
+
+					earliestFallback-params.TimeStart,
+					earliestFallback,
+				),
 				Cost:         totalCost,
 				WasScheduled: earliestFallback == params.TimeStart,
 			},

@@ -21,6 +21,14 @@ func min(a, b int64) int64 {
 	return b
 }
 
+func ternary[T any](condition bool, value1, value2 T) T {
+	if condition {
+		return value1
+	}
+
+	return value2
+}
+
 // Use as defer traceExit().
 func traceExit() {
 	pc, _, line, ok := runtime.Caller(1) // Get the caller of this function
