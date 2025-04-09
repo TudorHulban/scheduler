@@ -17,7 +17,12 @@ type paramsPopulatePossibilities struct {
 func populatePossibilities(params *paramsPopulatePossibilities) map[TimeInterval][]*Resource {
 	result := make(map[TimeInterval][]*Resource)
 
+	// Collect all possible slots across types
+	typeSlots := make(map[TimeInterval]map[uint8][]*Resource)
+
 	for resourceType, candidates := range params.Candidates {
+		needed := int(params.ResourcesNeededPerType[resourceType])
+
 		sort.Slice(
 			candidates,
 			func(i, j int) bool {
@@ -25,34 +30,64 @@ func populatePossibilities(params *paramsPopulatePossibilities) map[TimeInterval
 			},
 		)
 
-		resourcesNeeded := int(params.ResourcesNeededPerType[resourceType])
-
 		for _, candidate := range candidates {
 			availSlots, available := candidate.GetAvailability(&params.TimeInterval)
 
 			if available {
-				current := result[params.TimeInterval]
-				if len(current) < resourcesNeeded {
-					result[params.TimeInterval] = append(current, candidate)
+				current := typeSlots[params.TimeInterval]
+				if current == nil {
+					current = make(map[uint8][]*Resource)
+					typeSlots[params.TimeInterval] = current
 				}
 
-				continue
+				if len(current[resourceType]) < needed {
+					current[resourceType] = append(current[resourceType], candidate)
+				}
 			}
 
-			for _, slot := range availSlots {
-				if slot.TimeEnd-slot.TimeStart >= params.Duration {
-					normalizedSlot := TimeInterval{
-						TimeStart:     slot.TimeStart,
-						TimeEnd:       slot.TimeEnd,
-						SecondsOffset: params.TimeInterval.SecondsOffset, // Match input offset
-					}
+			if !available {
+				for _, slot := range availSlots {
+					if slot.TimeEnd-slot.TimeStart >= params.Duration {
+						normalizedSlot := TimeInterval{
+							TimeStart:     slot.TimeStart,
+							TimeEnd:       slot.TimeEnd,
+							SecondsOffset: params.TimeInterval.SecondsOffset,
+						}
 
-					current := result[normalizedSlot]
-					if len(current) < resourcesNeeded {
-						result[normalizedSlot] = append(current, candidate)
+						current := typeSlots[normalizedSlot]
+						if current == nil {
+							current = make(map[uint8][]*Resource)
+							typeSlots[normalizedSlot] = current
+						}
+
+						if len(current[resourceType]) < needed {
+							current[resourceType] = append(current[resourceType], candidate)
+						}
 					}
 				}
 			}
+		}
+	}
+
+	// Filter slots meeting all type-quantity requirements
+	for slot, resourcesByType := range typeSlots {
+		allSatisfied := true
+
+		for resourceType, needed := range params.ResourcesNeededPerType {
+			if len(resourcesByType[resourceType]) < int(needed) {
+				allSatisfied = false
+				break
+			}
+		}
+
+		if allSatisfied {
+			var slotResources []*Resource
+
+			for _, resources := range resourcesByType {
+				slotResources = append(slotResources, resources...)
+			}
+
+			result[slot] = slotResources
 		}
 	}
 
@@ -61,30 +96,23 @@ func populatePossibilities(params *paramsPopulatePossibilities) map[TimeInterval
 
 func findEarliestSlot(possibilities map[TimeInterval][]*Resource, neededCount int, offsetDifference int64) (int64, []*Resource) {
 	earliest := int64(_NoAvailability)
-
 	var bestResources []*Resource
 	bestCost := float32(math.MaxFloat32)
 
 	for slot, resources := range possibilities {
-		if len(resources) >= neededCount {
+		if len(resources) >= neededCount { // Ensure total quantity across types
 			start := slot.TimeStart - offsetDifference
-			var minCost float32
-
-			for i, res := range resources[:neededCount] {
+			var totalCost float32
+			for _, res := range resources[:neededCount] { // Take only needed
 				cost := res.costPerLoadUnit[1] // Assuming LoadUnit 1
-				if i == 0 || cost < minCost {
-					minCost = cost
-				}
+				totalCost += cost
 			}
-
-			if minCost < bestCost || (minCost == bestCost && (earliest == _NoAvailability || start < earliest)) {
-				bestCost = minCost
+			if totalCost < bestCost || (totalCost == bestCost && (earliest == _NoAvailability || start < earliest)) {
+				bestCost = totalCost
 				earliest = start
-
 				sort.Slice(resources, func(i, j int) bool {
 					return resources[i].costPerLoadUnit[1] < resources[j].costPerLoadUnit[1]
 				})
-
 				bestResources = resources[:neededCount]
 			}
 		}

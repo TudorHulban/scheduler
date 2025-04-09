@@ -144,8 +144,8 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 
 	possibilities := populatePossibilities(
 		&paramsPopulatePossibilities{
-			Candidates: resourceTypeCandidates,
-
+			Candidates:             resourceTypeCandidates,
+			ResourcesNeededPerType: resourcesNeededPerType,
 			TimeInterval: TimeInterval{
 				TimeStart:     start,
 				TimeEnd:       end,
@@ -155,11 +155,15 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 		},
 	)
 
-	noNeeded := resourcesNeededPerType[1] // Simplify - only one type of resources for now.
+	var totalNeeded int
+
+	for _, qty := range resourcesNeededPerType {
+		totalNeeded = totalNeeded + int(qty)
+	}
 
 	earliest, selectedResources := findEarliestSlot(
 		possibilities,
-		int(noNeeded),
+		totalNeeded,
 		offsetDifference,
 	)
 
@@ -197,12 +201,11 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 	}
 
 	earliestFallback := _NoAvailability
-	var fallbackResources []*Resource
+	fallbackByTime := make(map[int64][]*Resource)
 	totalCost = 0
-	needed := int(resourcesNeededPerType[1]) // Assuming type 1
 
 	for _, res := range loc.Resources {
-		if slices.Contains(resourceTypesNeeded, res.ResourceType) && len(fallbackResources) < needed {
+		if slices.Contains(resourceTypesNeeded, res.ResourceType) {
 			when := res.findAvailableTime(
 				&paramsFindAvailableTime{
 					TimeStart:             start,
@@ -215,30 +218,63 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 
 			if when != _NoAvailability {
 				whenTaskTime := when - offsetDifference
-				if earliestFallback == _NoAvailability || whenTaskTime < earliestFallback {
+				fallbackByTime[whenTaskTime] = append(fallbackByTime[whenTaskTime], res)
+
+				if earliestFallback == _NoAvailability {
 					earliestFallback = whenTaskTime
-					fallbackResources = []*Resource{res} // Reset to earliest
-
-					cost, _ := calculateTaskCost(params.TaskRun, res)
-					totalCost = cost
-				} else if whenTaskTime == earliestFallback {
-					fallbackResources = append(fallbackResources, res)
-
-					cost, _ := calculateTaskCost(params.TaskRun, res)
-					totalCost = totalCost + cost
 				}
 			}
 		}
 	}
 
-	if earliestFallback != _NoAvailability && len(fallbackResources) == needed {
-		return &ResponseCanRun{
-				WhenCanStart: ternary(
-					earliestFallback == params.TimeStart,
+	var fallbackResources []*Resource
 
-					earliestFallback-params.TimeStart,
-					earliestFallback,
-				),
+	if earliestFallback != _NoAvailability {
+		fallbackResources = nil
+		totalCost = 0
+		typeCounts := make(map[uint8]int)
+
+		for _, res := range fallbackByTime[earliestFallback] {
+			if typeCounts[res.ResourceType] < int(resourcesNeededPerType[res.ResourceType]) {
+				fallbackResources = append(fallbackResources, res)
+
+				typeCounts[res.ResourceType]++
+
+				cost, _ := calculateTaskCost(params.TaskRun, res)
+				totalCost += cost
+			}
+		}
+
+		// Add earlier available resources if needed
+		for when := int64(0); when < earliestFallback && len(fallbackResources) < totalNeeded; when++ {
+			if resources, ok := fallbackByTime[when]; ok {
+				for _, res := range resources {
+					if typeCounts[res.ResourceType] < int(resourcesNeededPerType[res.ResourceType]) {
+						fallbackResources = append(fallbackResources, res)
+
+						typeCounts[res.ResourceType]++
+
+						cost, _ := calculateTaskCost(params.TaskRun, res)
+						totalCost += cost
+					}
+				}
+			}
+		}
+	}
+
+	if earliestFallback != _NoAvailability && len(fallbackResources) == totalNeeded {
+		if earliestFallback == params.TimeStart {
+			for _, resource := range fallbackResources {
+				resource.schedule[TimeInterval{
+					TimeStart:     earliestFallback + offsetDifference,
+					TimeEnd:       earliestFallback + params.TaskRun.EstimatedDuration + offsetDifference,
+					SecondsOffset: loc.LocationOffset,
+				}] = RunID(params.TaskRun.ID)
+			}
+		}
+
+		return &ResponseCanRun{
+				WhenCanStart: earliestFallback,
 				Cost:         totalCost,
 				WasScheduled: earliestFallback == params.TimeStart,
 			},
