@@ -445,7 +445,52 @@ func TestCanSchedule(t *testing.T) {
 			},
 
 			expectedResult: ResponseCanRun{
-				WhenCanStart: now + oneHour + halfHour, // Gap between busy periods
+				WhenCanStart: now,
+				Cost:         4.0,
+				WasScheduled: true,
+			},
+		},
+		{
+			name: "4c. Multiple busy periods, looser interval",
+
+			scheduleResourceLowCost: map[TimeInterval]RunID{
+				{TimeStart: now, TimeEnd: now + oneHour}:               Maintenance,
+				{TimeStart: now + 2*oneHour, TimeEnd: now + 3*oneHour}: Maintenance,
+			},
+			scheduleResourceHighCost: map[TimeInterval]RunID{
+				{TimeStart: now + oneHour, TimeEnd: now + oneHour + halfHour}: Maintenance,
+			},
+			scheduleResourceType2: map[TimeInterval]RunID{
+				{TimeStart: now + oneHour, TimeEnd: now + oneHour + halfHour}: Maintenance,
+			},
+			params: ParamsCanRun{
+				TimeInterval: TimeInterval{
+					TimeStart: now,
+					TimeEnd:   now + 2*oneHour,
+				},
+				TaskRun: &Run{
+					ID:                7,
+					Name:              "4c.(modified 4b)",
+					EstimatedDuration: halfHour,
+					Dependencies: []RunDependency{
+						{
+							ResourceType:     1,
+							ResourceQuantity: 1,
+						},
+						{
+							ResourceType:     2,
+							ResourceQuantity: 1,
+						},
+					},
+					RunLoad: RunLoad{
+						Load:     1.0,
+						LoadUnit: 1,
+					},
+				},
+			},
+
+			expectedResult: ResponseCanRun{
+				WhenCanStart: now + oneHour + halfHour,
 				Cost:         3.0,
 				WasScheduled: false,
 			},

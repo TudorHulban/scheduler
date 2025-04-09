@@ -115,6 +115,8 @@ type ResponseCanRun struct {
 // If it cannot run at TimeStart, it provides the timestamp
 // from which it could in WhenCanStart and the cost of this run.
 func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) {
+	defer traceExit()
+
 	if params.TimeEnd-params.TimeStart < params.TaskRun.EstimatedDuration {
 		return nil,
 			goerrors.ErrValidation{
@@ -203,7 +205,6 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 	earliestFallback := _NoAvailability
 	fallbackByTime := make(map[int64][]*Resource)
 	totalCost = 0
-
 	for _, res := range loc.Resources {
 		if slices.Contains(resourceTypesNeeded, res.ResourceType) {
 			when := res.findAvailableTime(
@@ -215,12 +216,10 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 					SecondsOffsetLocation: loc.LocationOffset,
 				},
 			)
-
 			if when != _NoAvailability {
 				whenTaskTime := when - offsetDifference
 				fallbackByTime[whenTaskTime] = append(fallbackByTime[whenTaskTime], res)
-
-				if earliestFallback == _NoAvailability {
+				if earliestFallback == _NoAvailability || whenTaskTime < earliestFallback {
 					earliestFallback = whenTaskTime
 				}
 			}
@@ -230,34 +229,29 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 	var fallbackResources []*Resource
 
 	if earliestFallback != _NoAvailability {
-		fallbackResources = nil
-		totalCost = 0
-		typeCounts := make(map[uint8]int)
-
-		for _, res := range fallbackByTime[earliestFallback] {
-			if typeCounts[res.ResourceType] < int(resourcesNeededPerType[res.ResourceType]) {
-				fallbackResources = append(fallbackResources, res)
-
-				typeCounts[res.ResourceType]++
-
-				cost, _ := calculateTaskCost(params.TaskRun, res)
-				totalCost += cost
-			}
-		}
-
-		// Add earlier available resources if needed
-		for when := int64(0); when < earliestFallback && len(fallbackResources) < totalNeeded; when++ {
-			if resources, ok := fallbackByTime[when]; ok {
-				for _, res := range resources {
-					if typeCounts[res.ResourceType] < int(resourcesNeededPerType[res.ResourceType]) {
-						fallbackResources = append(fallbackResources, res)
-
-						typeCounts[res.ResourceType]++
-
-						cost, _ := calculateTaskCost(params.TaskRun, res)
-						totalCost += cost
+		for whenTaskTime := earliestFallback; whenTaskTime <= end; whenTaskTime++ {
+			typeCounts := make(map[uint8]int)
+			availableResources := make([]*Resource, 0)
+			// Check resources available at or before this time
+			for t := earliestFallback; t <= whenTaskTime; t++ {
+				if resources, ok := fallbackByTime[t]; ok {
+					for _, res := range resources {
+						if typeCounts[res.ResourceType] < int(resourcesNeededPerType[res.ResourceType]) {
+							availableResources = append(availableResources, res)
+							typeCounts[res.ResourceType]++
+						}
 					}
 				}
+			}
+			if len(availableResources) >= totalNeeded {
+				earliestFallback = whenTaskTime
+				fallbackResources = availableResources[:totalNeeded]
+				totalCost = 0
+				for _, res := range fallbackResources {
+					cost, _ := calculateTaskCost(params.TaskRun, res)
+					totalCost += cost
+				}
+				break
 			}
 		}
 	}
@@ -272,13 +266,11 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 				}] = RunID(params.TaskRun.ID)
 			}
 		}
-
 		return &ResponseCanRun{
-				WhenCanStart: earliestFallback,
-				Cost:         totalCost,
-				WasScheduled: earliestFallback == params.TimeStart,
-			},
-			nil
+			WhenCanStart: earliestFallback,
+			Cost:         totalCost,
+			WasScheduled: earliestFallback == params.TimeStart,
+		}, nil
 	}
 
 	return &ResponseCanRun{
