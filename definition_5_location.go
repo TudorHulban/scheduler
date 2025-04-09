@@ -147,6 +147,7 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 	possibilities := populatePossibilities(
 		&paramsPopulatePossibilities{
 			Candidates: resourceTypeCandidates,
+
 			TimeInterval: TimeInterval{
 				TimeStart:     start,
 				TimeEnd:       end,
@@ -154,6 +155,10 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 			},
 			Duration: params.TaskRun.EstimatedDuration,
 		},
+	)
+
+	fmt.Println(
+		possibilities,
 	)
 
 	noNeeded := resourcesNeededPerType[1] // Simplify - only one type of resources for now.

@@ -24,6 +24,34 @@ type Resource struct {
 	ResourceType uint8
 }
 
+func (r Resource) String() string {
+	var sb strings.Builder
+
+	sb.WriteString("Resource{\n")
+	sb.WriteString(fmt.Sprintf("\tName: %q,\n", r.Name))
+
+	// Schedule map
+	sb.WriteString("\tSchedule: map[TimeInterval]RunID{\n")
+	for interval, runID := range r.schedule {
+		sb.WriteString(fmt.Sprintf("\t\t%v: %d,\n", interval, runID))
+	}
+	sb.WriteString("\t},\n")
+
+	// Cost map
+	sb.WriteString("\tCostPerLoadUnit: map[uint8]float32{\n")
+	for unit, cost := range r.costPerLoadUnit {
+		sb.WriteString(fmt.Sprintf("\t\t%d: %f,\n", unit, cost))
+	}
+	sb.WriteString("\t},\n")
+
+	// Other fields
+	sb.WriteString(fmt.Sprintf("\tID: %d,\n", r.ID))
+	sb.WriteString(fmt.Sprintf("\tResourceType: %d,\n", r.ResourceType))
+	sb.WriteString("}")
+
+	return sb.String()
+}
+
 type ParamsNewResource struct {
 	Name            string
 	CostPerLoadUnit map[uint8]float32

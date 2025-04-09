@@ -7,6 +7,7 @@ import (
 func TestCanSchedule(t *testing.T) {
 	resourceLowCost := &Resource{
 		ID:              1,
+		Name:            "Low Cost",
 		ResourceType:    1,
 		costPerLoadUnit: map[uint8]float32{1: 2.0},
 		schedule:        make(map[TimeInterval]RunID),
@@ -14,6 +15,7 @@ func TestCanSchedule(t *testing.T) {
 
 	resourceHighCost := &Resource{
 		ID:              2,
+		Name:            "High Cost",
 		ResourceType:    1,
 		costPerLoadUnit: map[uint8]float32{1: 3.0},
 		schedule:        make(map[TimeInterval]RunID),
