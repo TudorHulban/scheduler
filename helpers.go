@@ -33,3 +33,16 @@ func traceExit() {
 		)
 	}
 }
+
+func traceExitWMarker(marker string) {
+	pc, _, line, ok := runtime.Caller(1) // Get the caller of this function
+	if ok {
+		fmt.Printf(
+			"exiting function %s at line %d (marker: %s).\n",
+
+			runtime.FuncForPC(pc).Name(),
+			line,
+			marker,
+		)
+	}
+}

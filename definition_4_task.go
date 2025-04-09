@@ -41,3 +41,19 @@ func (r *Run) GetNeededResourceTypes() []uint8 {
 
 	return result
 }
+
+func (r *Run) GetNeededResourcesPerType() map[uint8]uint16 {
+	result := make(map[uint8]uint16)
+
+	for _, dependency := range r.Dependencies {
+		if currentNoNeeded, exists := result[dependency.ResourceType]; exists {
+			result[dependency.ResourceType] = currentNoNeeded + uint16(dependency.ResourceQuantity)
+
+			continue
+		}
+
+		result[dependency.ResourceType] = uint16(dependency.ResourceQuantity)
+	}
+
+	return result
+}
