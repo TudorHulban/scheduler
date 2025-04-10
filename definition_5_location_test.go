@@ -445,9 +445,9 @@ func TestCanSchedule(t *testing.T) {
 			},
 
 			expectedResult: ResponseCanRun{
-				WhenCanStart: now,
-				Cost:         4.0,
-				WasScheduled: true,
+				WhenCanStart: now + oneHour + halfHour,
+				Cost:         3.0,
+				WasScheduled: false,
 			},
 		},
 		{

@@ -1,0 +1,5 @@
+__debug*
+*.out
+cover.html
+.local*.json
+test-output.json
