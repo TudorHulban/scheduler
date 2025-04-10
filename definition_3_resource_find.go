@@ -11,7 +11,7 @@ type paramsFindAvailableTime struct {
 }
 
 // findAvailableTime returns task time not resource time.
-func (res *Resource) findAvailableTime(params *paramsFindAvailableTime) int64 {
+func (res *ResourceScheduled) findAvailableTime(params *paramsFindAvailableTime) int64 {
 	if params.TimeStart > params.MaximumTimeStart {
 		return _NoAvailability
 	}

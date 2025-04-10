@@ -5,33 +5,42 @@ import (
 )
 
 func TestCanSchedule(t *testing.T) {
-	resourceLowCost := Resource{
-		ID:              1,
-		Name:            "Low Cost",
-		ResourceType:    1,
-		costPerLoadUnit: map[uint8]float32{1: 2.0},
-		schedule:        make(map[TimeInterval]RunID),
+	resourceLowCost := ResourceScheduled{
+		ResourceInfo: ResourceInfo{
+			ID:              1,
+			Name:            "Low Cost",
+			ResourceType:    1,
+			CostPerLoadUnit: map[uint8]float32{1: 2.0},
+		},
+
+		schedule: make(map[TimeInterval]RunID),
 	}
 
-	resourceHighCost := Resource{
-		ID:              2,
-		Name:            "High Cost",
-		ResourceType:    1,
-		costPerLoadUnit: map[uint8]float32{1: 3.0},
-		schedule:        make(map[TimeInterval]RunID),
+	resourceHighCost := ResourceScheduled{
+		ResourceInfo: ResourceInfo{
+			ID:              2,
+			Name:            "High Cost",
+			ResourceType:    1,
+			CostPerLoadUnit: map[uint8]float32{1: 3.0},
+		},
+
+		schedule: make(map[TimeInterval]RunID),
 	}
 
-	resourceType2 := Resource{
-		ID:              3,
-		Name:            "Resource Type 2",
-		ResourceType:    2,
-		costPerLoadUnit: map[uint8]float32{1: 1.0},
-		schedule:        make(map[TimeInterval]RunID),
+	resourceType2 := ResourceScheduled{
+		ResourceInfo: ResourceInfo{
+			ID:              3,
+			Name:            "Resource Type 2",
+			ResourceType:    2,
+			CostPerLoadUnit: map[uint8]float32{1: 1.0},
+		},
+
+		schedule: make(map[TimeInterval]RunID),
 	}
 
 	location := Location{
 		Name: "Test Location",
-		Resources: []*Resource{
+		Resources: []*ResourceScheduled{
 			&resourceLowCost,
 			&resourceHighCost,
 		},
@@ -549,7 +558,7 @@ func TestCanSchedule(t *testing.T) {
 					make(map[TimeInterval]RunID),
 				)
 
-				location.Resources = []*Resource{
+				location.Resources = []*ResourceScheduled{
 					&resourceLowCost,
 					&resourceHighCost,
 					&resourceType2,

@@ -10,15 +10,15 @@ import (
 
 type Location struct {
 	Name      string
-	Resources []*Resource
+	Resources []*ResourceScheduled
 
 	ID             int64
 	LocationOffset int64
 }
 
 type ParamsNewLocation struct {
-	Name      string      `valid:"required"`
-	Resources []*Resource `valid:"required"`
+	Name      string               `valid:"required"`
+	Resources []*ResourceScheduled `valid:"required"`
 
 	ID             int64 `valid:"required"`
 	LocationOffset int64

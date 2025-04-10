@@ -32,7 +32,7 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 			}
 	}
 
-	resourceTypeCandidates := make(map[uint8][]*Resource)
+	resourceTypeCandidates := make(map[uint8][]*ResourceScheduled)
 	resourceTypesNeeded := params.TaskRun.GetNeededResourceTypes()
 	resourcesNeededPerType := params.TaskRun.GetNeededResourcesPerType()
 
@@ -58,6 +58,7 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 				TimeEnd:       end,
 				SecondsOffset: loc.LocationOffset,
 			},
+
 			Duration: params.TaskRun.EstimatedDuration,
 		},
 	)
@@ -69,9 +70,11 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 	}
 
 	earliest, selectedResources := findEarliestSlot(
-		possibilities,
-		totalNeeded,
-		offsetDifference,
+		&paramsFindEarliestSlot{
+			Possibilities:    possibilities,
+			NeededCount:      totalNeeded,
+			OffsetDifference: offsetDifference,
+		},
 	)
 
 	var totalCost float32
@@ -112,9 +115,9 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 	}
 
 	// More efficient algorithm for finding fallback resources
-	resourcesByType := make(map[uint8][]*Resource)
-	earliestByResource := make(map[*Resource]int64)
-	costByResource := make(map[*Resource]float32)
+	resourcesByType := make(map[uint8][]*ResourceScheduled)
+	earliestByResource := make(map[*ResourceScheduled]int64)
+	costByResource := make(map[*ResourceScheduled]float32)
 
 	// First gather availability information for all resources
 	for _, res := range loc.Resources {
@@ -142,25 +145,27 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 	}
 
 	// Check if we have enough resources of each type
-	for rType, needed := range resourcesNeededPerType {
-		if len(resourcesByType[rType]) < int(needed) {
+	for resourceType, needed := range resourcesNeededPerType {
+		if len(resourcesByType[resourceType]) < int(needed) {
 			// Not enough resources of this type available
 			return &ResponseCanRun{
-				WhenCanStart: params.TimeEnd,
-				Cost:         0,
-				WasScheduled: false,
-			}, nil
+					WhenCanStart: params.TimeEnd,
+					Cost:         0,
+					WasScheduled: false,
+				},
+				nil
 		}
 	}
 
 	// Group resources by their earliest available time
-	timeToResources := make(map[int64][]*Resource)
+	timeToResources := make(map[int64][]*ResourceScheduled)
 	var allTimes []int64
 
 	for _, resources := range resourcesByType {
 		for _, res := range resources {
 			t := earliestByResource[res]
 			timeToResources[t] = append(timeToResources[t], res)
+
 			// Keep track of unique times
 			if len(timeToResources[t]) == 1 {
 				allTimes = append(allTimes, t)
@@ -168,14 +173,16 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 		}
 	}
 
-	// Sort times
-	sort.Slice(allTimes, func(i, j int) bool {
-		return allTimes[i] < allTimes[j]
-	})
+	sort.Slice(
+		allTimes,
+		func(i, j int) bool {
+			return allTimes[i] < allTimes[j]
+		},
+	)
 
 	// Find the earliest time where we can schedule all required resources
 	earliestFallback := _NoAvailability
-	var selectedCombination []*Resource
+	selectedCombination := make([]*ResourceScheduled, 0)
 	lowestCost := float32(math.MaxFloat32)
 
 	// For each possible start time
@@ -185,10 +192,13 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 		}
 
 		// Collect all available resources at or before this time
-		availableResources := make(map[uint8][]*Resource)
+		availableResources := make(map[uint8][]*ResourceScheduled)
 		for t := allTimes[0]; t <= startTime; t++ {
 			for _, res := range timeToResources[t] {
-				availableResources[res.ResourceType] = append(availableResources[res.ResourceType], res)
+				availableResources[res.ResourceType] = append(
+					availableResources[res.ResourceType],
+					res,
+				)
 			}
 		}
 
@@ -197,6 +207,7 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 		for rType, needed := range resourcesNeededPerType {
 			if len(availableResources[rType]) < int(needed) {
 				hasEnough = false
+
 				break
 			}
 		}
@@ -206,7 +217,13 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 		}
 
 		// Try all possible combinations of resources to find cheapest
-		combinations := generateCheapestCombinations(availableResources, resourcesNeededPerType, costByResource)
+		combinations := generateCheapestCombinations(
+			&paramsGenerateCheapestCombinations{
+				AvailableResources:     availableResources,
+				ResourcesNeededPerType: resourcesNeededPerType,
+				CostByResource:         costByResource,
+			},
+		)
 
 		for _, combo := range combinations {
 			// Calculate total cost
@@ -237,18 +254,18 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 				TimeEnd:       earliestFallback + params.TaskRun.EstimatedDuration + offsetDifference,
 				SecondsOffset: loc.LocationOffset,
 			}
-			runID := RunID(params.TaskRun.ID)
 
 			for _, resource := range selectedCombination {
-				resource.schedule[timeInterval] = runID
+				resource.schedule[timeInterval] = RunID(params.TaskRun.ID)
 			}
 		}
 
 		return &ResponseCanRun{
-			WhenCanStart: earliestFallback,
-			Cost:         lowestCost,
-			WasScheduled: earliestFallback == params.TimeStart,
-		}, nil
+				WhenCanStart: earliestFallback,
+				Cost:         lowestCost,
+				WasScheduled: earliestFallback == params.TimeStart,
+			},
+			nil
 	}
 
 	return &ResponseCanRun{
@@ -257,31 +274,4 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 			WasScheduled: false,
 		},
 		nil
-}
-
-// Helper function to generate the cheapest resource combinations
-func generateCheapestCombinations(availableResources map[uint8][]*Resource, resourcesNeededPerType map[uint8]uint16, costByResource map[*Resource]float32) [][]*Resource {
-	// For each resource type, sort by cost
-	for rType, resources := range availableResources {
-		sort.Slice(resources, func(i, j int) bool {
-			return costByResource[resources[i]] < costByResource[resources[j]]
-		})
-
-		// Keep only the N cheapest resources we need
-		needed := int(resourcesNeededPerType[rType])
-		if needed > 0 && len(resources) > needed {
-			availableResources[rType] = resources[:needed]
-		}
-	}
-
-	// Build the cheapest combination
-	var cheapestCombo []*Resource
-	for rType, resources := range availableResources {
-		needed := int(resourcesNeededPerType[rType])
-		if needed > 0 {
-			cheapestCombo = append(cheapestCombo, resources[:needed]...)
-		}
-	}
-
-	return [][]*Resource{cheapestCombo}
 }

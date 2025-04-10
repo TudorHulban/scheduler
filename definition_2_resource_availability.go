@@ -6,7 +6,7 @@ import "sort"
 //   - (nil, true)   = Fully available (no busy intervals or no overlap)
 //   - (slots, false) = Partially available (returns available time slots)
 //   - (nil, false)  = Completely unavailable (requested interval is fully booked)
-func (res *Resource) GetAvailability(searchInterval *TimeInterval) ([]TimeInterval, bool) {
+func (res *ResourceScheduled) GetAvailability(searchInterval *TimeInterval) ([]TimeInterval, bool) {
 	var busyUTCIntervals []TimeInterval
 
 	for scheduledInterval := range res.schedule {

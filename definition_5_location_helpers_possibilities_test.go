@@ -11,17 +11,20 @@ func TestPopulatePossibilities(t *testing.T) {
 	tests := []struct {
 		name     string
 		params   paramsPopulatePossibilities
-		expected map[TimeInterval][]*Resource
+		expected map[TimeInterval][]*ResourceScheduled
 	}{
 		{
 			name: "1. free, single candidate, exact interval",
 			params: paramsPopulatePossibilities{
-				Candidates: map[uint8][]*Resource{
+				Candidates: map[uint8][]*ResourceScheduled{
 					1: {
-						&Resource{
-							ID:              1,
-							schedule:        map[TimeInterval]RunID{},
-							costPerLoadUnit: map[uint8]float32{1: 2.0},
+						&ResourceScheduled{
+							ResourceInfo: ResourceInfo{
+								ID:              1,
+								CostPerLoadUnit: map[uint8]float32{1: 2.0},
+							},
+
+							schedule: map[TimeInterval]RunID{},
 						},
 					},
 				},
@@ -30,12 +33,15 @@ func TestPopulatePossibilities(t *testing.T) {
 				Duration:               oneHour,
 			},
 
-			expected: map[TimeInterval][]*Resource{
+			expected: map[TimeInterval][]*ResourceScheduled{
 				{TimeStart: now, TimeEnd: now + oneHour}: {
-					&Resource{
-						ID:              1,
-						schedule:        map[TimeInterval]RunID{},
-						costPerLoadUnit: map[uint8]float32{1: 2.0},
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              1,
+							CostPerLoadUnit: map[uint8]float32{1: 2.0},
+						},
+
+						schedule: map[TimeInterval]RunID{},
 					},
 				},
 			},
@@ -43,19 +49,25 @@ func TestPopulatePossibilities(t *testing.T) {
 		{
 			name: "2. multiple candidates with different costs, exact interval",
 			params: paramsPopulatePossibilities{
-				Candidates: map[uint8][]*Resource{
+				Candidates: map[uint8][]*ResourceScheduled{
 					1: {
-						&Resource{
-							ID:              1,
-							schedule:        map[TimeInterval]RunID{},
-							costPerLoadUnit: map[uint8]float32{1: 2.0},
+						&ResourceScheduled{
+							ResourceInfo: ResourceInfo{
+								ID:              1,
+								CostPerLoadUnit: map[uint8]float32{1: 2.0},
+							},
+
+							schedule: map[TimeInterval]RunID{},
 						},
-						&Resource{
-							ID: 2,
+						&ResourceScheduled{
+							ResourceInfo: ResourceInfo{
+								ID:              2,
+								CostPerLoadUnit: map[uint8]float32{1: 3.0},
+							},
+
 							schedule: map[TimeInterval]RunID{
 								{TimeStart: now, TimeEnd: now + oneHour}: Maintenance,
 							},
-							costPerLoadUnit: map[uint8]float32{1: 3.0},
 						},
 					},
 				},
@@ -64,12 +76,15 @@ func TestPopulatePossibilities(t *testing.T) {
 				Duration:               oneHour,
 			},
 
-			expected: map[TimeInterval][]*Resource{
+			expected: map[TimeInterval][]*ResourceScheduled{
 				{TimeStart: now, TimeEnd: now + oneHour}: {
-					&Resource{
-						ID:              1,
-						schedule:        map[TimeInterval]RunID{},
-						costPerLoadUnit: map[uint8]float32{1: 2.0},
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              1,
+							CostPerLoadUnit: map[uint8]float32{1: 2.0},
+						},
+
+						schedule: map[TimeInterval]RunID{},
 					},
 				},
 			},
@@ -77,15 +92,18 @@ func TestPopulatePossibilities(t *testing.T) {
 		{
 			name: "3. candidate with alternative slots, exact interval",
 			params: paramsPopulatePossibilities{
-				Candidates: map[uint8][]*Resource{
+				Candidates: map[uint8][]*ResourceScheduled{
 					1: {
-						&Resource{
-							ID: 1,
+						&ResourceScheduled{
+							ResourceInfo: ResourceInfo{
+								ID:              1,
+								CostPerLoadUnit: map[uint8]float32{1: 2.0},
+							},
+
 							schedule: map[TimeInterval]RunID{
 								{TimeStart: now + 3*oneHour, TimeEnd: now + 4*oneHour}: Maintenance,
 								{TimeStart: now + 5*oneHour, TimeEnd: now + 6*oneHour}: Maintenance,
 							},
-							costPerLoadUnit: map[uint8]float32{1: 2.0},
 						},
 					},
 				},
@@ -94,15 +112,18 @@ func TestPopulatePossibilities(t *testing.T) {
 				Duration:               oneHour,
 			},
 
-			expected: map[TimeInterval][]*Resource{
+			expected: map[TimeInterval][]*ResourceScheduled{
 				{TimeStart: now, TimeEnd: now + oneHour}: {
-					&Resource{
-						ID: 1,
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              1,
+							CostPerLoadUnit: map[uint8]float32{1: 2.0},
+						},
+
 						schedule: map[TimeInterval]RunID{
 							{TimeStart: now + 3*oneHour, TimeEnd: now + 4*oneHour}: Maintenance,
 							{TimeStart: now + 5*oneHour, TimeEnd: now + 6*oneHour}: Maintenance,
 						},
-						costPerLoadUnit: map[uint8]float32{1: 2.0},
 					},
 				},
 			},
@@ -110,22 +131,28 @@ func TestPopulatePossibilities(t *testing.T) {
 		{
 			name: "4. multiple candidate groups - slide to next hour, looser interval",
 			params: paramsPopulatePossibilities{
-				Candidates: map[uint8][]*Resource{
+				Candidates: map[uint8][]*ResourceScheduled{
 					1: {
-						&Resource{
-							ID: 1,
+						&ResourceScheduled{
+							ResourceInfo: ResourceInfo{
+								ID:              1,
+								CostPerLoadUnit: map[uint8]float32{1: 2.0},
+							},
+
 							schedule: map[TimeInterval]RunID{
 								{TimeStart: now, TimeEnd: now + oneHour}: Maintenance,
 							},
-							costPerLoadUnit: map[uint8]float32{1: 2.0},
 						},
 
-						&Resource{
-							ID: 2,
+						&ResourceScheduled{
+							ResourceInfo: ResourceInfo{
+								ID:              2,
+								CostPerLoadUnit: map[uint8]float32{1: 3.0},
+							},
+
 							schedule: map[TimeInterval]RunID{
 								{TimeStart: now, TimeEnd: now + oneHour}: Maintenance,
 							},
-							costPerLoadUnit: map[uint8]float32{1: 3.0},
 						},
 					},
 				},
@@ -134,14 +161,17 @@ func TestPopulatePossibilities(t *testing.T) {
 				Duration:               oneHour,
 			},
 
-			expected: map[TimeInterval][]*Resource{
+			expected: map[TimeInterval][]*ResourceScheduled{
 				{TimeStart: now + oneHour, TimeEnd: now + 2*oneHour}: {
-					&Resource{
-						ID: 1,
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              1,
+							CostPerLoadUnit: map[uint8]float32{1: 2.0},
+						},
+
 						schedule: map[TimeInterval]RunID{
 							{TimeStart: now, TimeEnd: now + oneHour}: Maintenance,
 						},
-						costPerLoadUnit: map[uint8]float32{1: 2.0},
 					},
 				},
 			},
@@ -149,25 +179,28 @@ func TestPopulatePossibilities(t *testing.T) {
 		{
 			name: "5. no available candidates",
 			params: paramsPopulatePossibilities{
-				Candidates:             map[uint8][]*Resource{},
+				Candidates:             map[uint8][]*ResourceScheduled{},
 				ResourcesNeededPerType: map[uint8]uint16{1: 1},
 				TimeInterval:           TimeInterval{TimeStart: now, TimeEnd: now + oneHour},
 				Duration:               2 * oneHour, // Duration longer than available slots
 			},
 
-			expected: map[TimeInterval][]*Resource{},
+			expected: map[TimeInterval][]*ResourceScheduled{},
 		},
 		{
 			name: "6. busy resource should not be available, exact interval",
 			params: paramsPopulatePossibilities{
-				Candidates: map[uint8][]*Resource{
+				Candidates: map[uint8][]*ResourceScheduled{
 					1: {
-						&Resource{
-							ID: 1,
+						&ResourceScheduled{
+							ResourceInfo: ResourceInfo{
+								ID:              1,
+								CostPerLoadUnit: map[uint8]float32{1: 2.0},
+							},
+
 							schedule: map[TimeInterval]RunID{
 								{TimeStart: now, TimeEnd: now + oneHour}: Maintenance,
 							},
-							costPerLoadUnit: map[uint8]float32{1: 2.0},
 						},
 					},
 				},
@@ -176,19 +209,22 @@ func TestPopulatePossibilities(t *testing.T) {
 				Duration:               oneHour,
 			},
 
-			expected: map[TimeInterval][]*Resource{},
+			expected: map[TimeInterval][]*ResourceScheduled{},
 		},
 		{
 			name: "7. candidate with partial slot free, looser interval",
 			params: paramsPopulatePossibilities{
-				Candidates: map[uint8][]*Resource{
+				Candidates: map[uint8][]*ResourceScheduled{
 					1: {
-						&Resource{
-							ID: 1,
+						&ResourceScheduled{
+							ResourceInfo: ResourceInfo{
+								ID:              1,
+								CostPerLoadUnit: map[uint8]float32{1: 2.0},
+							},
+
 							schedule: map[TimeInterval]RunID{
 								{TimeStart: now, TimeEnd: now + halfHour}: Maintenance,
 							},
-							costPerLoadUnit: map[uint8]float32{1: 2.0},
 						},
 					},
 				},
@@ -197,14 +233,17 @@ func TestPopulatePossibilities(t *testing.T) {
 				Duration:               oneHour,
 			},
 
-			expected: map[TimeInterval][]*Resource{
+			expected: map[TimeInterval][]*ResourceScheduled{
 				{TimeStart: now + halfHour, TimeEnd: now + halfHour + oneHour}: {
-					&Resource{
-						ID: 1,
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              1,
+							CostPerLoadUnit: map[uint8]float32{1: 2.0},
+						},
+
 						schedule: map[TimeInterval]RunID{
 							{TimeStart: now, TimeEnd: now + halfHour}: Maintenance,
 						},
-						costPerLoadUnit: map[uint8]float32{1: 2.0},
 					},
 				},
 			},
@@ -212,22 +251,26 @@ func TestPopulatePossibilities(t *testing.T) {
 		{
 			name: "8. candidate with partial slot free, looser interval",
 			params: paramsPopulatePossibilities{
-				Candidates: map[uint8][]*Resource{
+				Candidates: map[uint8][]*ResourceScheduled{
 					1: {
-						&Resource{
-							ID: 1,
+						&ResourceScheduled{
+							ResourceInfo: ResourceInfo{
+								ID:              1,
+								CostPerLoadUnit: map[uint8]float32{1: 2.0},
+							},
 
 							schedule: map[TimeInterval]RunID{
 								{TimeStart: now, TimeEnd: now + oneHour}:               Maintenance,
 								{TimeStart: now + 2*oneHour, TimeEnd: now + 3*oneHour}: Maintenance,
 							},
-							costPerLoadUnit: map[uint8]float32{1: 2.0},
 						},
-						&Resource{
-							ID: 2,
+						&ResourceScheduled{
+							ResourceInfo: ResourceInfo{
+								ID:              2,
+								CostPerLoadUnit: map[uint8]float32{1: 3.0},
+							},
 
-							schedule:        map[TimeInterval]RunID{},
-							costPerLoadUnit: map[uint8]float32{1: 3.0},
+							schedule: map[TimeInterval]RunID{},
 						},
 					},
 				},
@@ -241,31 +284,43 @@ func TestPopulatePossibilities(t *testing.T) {
 
 			expected: ResourcesPerTimeInterval{
 				{TimeStart: now, TimeEnd: now + halfHour}: {
-					&Resource{
-						ID:              2,
-						schedule:        map[TimeInterval]RunID{},
-						costPerLoadUnit: map[uint8]float32{1: 3.0},
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              2,
+							CostPerLoadUnit: map[uint8]float32{1: 3.0},
+						},
+
+						schedule: map[TimeInterval]RunID{},
 					},
 				},
 				{TimeStart: now + halfHour, TimeEnd: now + oneHour}: {
-					&Resource{
-						ID:              2,
-						schedule:        map[TimeInterval]RunID{},
-						costPerLoadUnit: map[uint8]float32{1: 3.0},
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              2,
+							CostPerLoadUnit: map[uint8]float32{1: 3.0},
+						},
+
+						schedule: map[TimeInterval]RunID{},
 					},
 				},
 				{TimeStart: now + oneHour, TimeEnd: now + oneHour + halfHour}: {
-					&Resource{
-						ID:              1,
-						schedule:        map[TimeInterval]RunID{},
-						costPerLoadUnit: map[uint8]float32{1: 2.0},
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              1,
+							CostPerLoadUnit: map[uint8]float32{1: 2.0},
+						},
+
+						schedule: map[TimeInterval]RunID{},
 					},
 				},
 				{TimeStart: now + oneHour + halfHour, TimeEnd: now + 2*oneHour}: {
-					&Resource{
-						ID:              1,
-						schedule:        map[TimeInterval]RunID{},
-						costPerLoadUnit: map[uint8]float32{1: 2.0},
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              1,
+							CostPerLoadUnit: map[uint8]float32{1: 2.0},
+						},
+
+						schedule: map[TimeInterval]RunID{},
 					},
 				},
 			},
@@ -274,31 +329,40 @@ func TestPopulatePossibilities(t *testing.T) {
 		{
 			name: "9. multiple candidates with partial slot free, looser interval",
 			params: paramsPopulatePossibilities{
-				Candidates: map[uint8][]*Resource{
+				Candidates: map[uint8][]*ResourceScheduled{
 					1: {
-						&Resource{
-							ID: 1,
+						&ResourceScheduled{
+							ResourceInfo: ResourceInfo{
+								ID:              1,
+								CostPerLoadUnit: map[uint8]float32{1: 2.0},
+							},
+
 							schedule: map[TimeInterval]RunID{
 								{TimeStart: now, TimeEnd: now + oneHour}:               Maintenance,
 								{TimeStart: now + 2*oneHour, TimeEnd: now + 3*oneHour}: Maintenance,
 							},
-							costPerLoadUnit: map[uint8]float32{1: 2.0},
 						},
-						&Resource{
-							ID: 2,
+						&ResourceScheduled{
+							ResourceInfo: ResourceInfo{
+								ID:              2,
+								CostPerLoadUnit: map[uint8]float32{1: 3.0},
+							},
+
 							schedule: map[TimeInterval]RunID{
 								{TimeStart: now + oneHour, TimeEnd: now + oneHour + halfHour}: Maintenance,
 							},
-							costPerLoadUnit: map[uint8]float32{1: 3.0},
 						},
 					},
 					2: {
-						&Resource{
-							ID: 3,
+						&ResourceScheduled{
+							ResourceInfo: ResourceInfo{
+								ID:              3,
+								CostPerLoadUnit: map[uint8]float32{1: 1.0},
+							},
+
 							schedule: map[TimeInterval]RunID{
 								{TimeStart: now + oneHour, TimeEnd: now + oneHour + halfHour}: Maintenance,
 							},
-							costPerLoadUnit: map[uint8]float32{1: 1.0},
 						},
 					},
 				},
@@ -313,54 +377,72 @@ func TestPopulatePossibilities(t *testing.T) {
 				Duration: halfHour,
 			},
 
-			expected: map[TimeInterval][]*Resource{
+			expected: map[TimeInterval][]*ResourceScheduled{
 				{TimeStart: now, TimeEnd: now + halfHour}: {
-					&Resource{
-						ID: 2,
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              2,
+							CostPerLoadUnit: map[uint8]float32{1: 3.0},
+						},
+
 						schedule: map[TimeInterval]RunID{
 							{TimeStart: now + oneHour, TimeEnd: now + oneHour + halfHour}: Maintenance,
 						},
-						costPerLoadUnit: map[uint8]float32{1: 3.0},
 					},
-					&Resource{
-						ID: 3,
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              3,
+							CostPerLoadUnit: map[uint8]float32{1: 1.0},
+						},
+
 						schedule: map[TimeInterval]RunID{
 							{TimeStart: now + oneHour, TimeEnd: now + oneHour + halfHour}: Maintenance,
 						},
-						costPerLoadUnit: map[uint8]float32{1: 1.0},
 					},
 				},
 				{TimeStart: now + halfHour, TimeEnd: now + oneHour}: {
-					&Resource{
-						ID: 2,
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              2,
+							CostPerLoadUnit: map[uint8]float32{1: 3.0},
+						},
+
 						schedule: map[TimeInterval]RunID{
 							{TimeStart: now + oneHour, TimeEnd: now + oneHour + halfHour}: Maintenance,
 						},
-						costPerLoadUnit: map[uint8]float32{1: 3.0},
 					},
-					&Resource{
-						ID: 3,
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              3,
+							CostPerLoadUnit: map[uint8]float32{1: 1.0},
+						},
+
 						schedule: map[TimeInterval]RunID{
 							{TimeStart: now + oneHour, TimeEnd: now + oneHour + halfHour}: Maintenance,
 						},
-						costPerLoadUnit: map[uint8]float32{1: 1.0},
 					},
 				},
 				{TimeStart: now + oneHour + halfHour, TimeEnd: now + 2*oneHour}: {
-					&Resource{
-						ID: 1,
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              1,
+							CostPerLoadUnit: map[uint8]float32{1: 2.0},
+						},
+
 						schedule: map[TimeInterval]RunID{
 							{TimeStart: now, TimeEnd: now + oneHour}:               Maintenance,
 							{TimeStart: now + 2*oneHour, TimeEnd: now + 3*oneHour}: Maintenance,
 						},
-						costPerLoadUnit: map[uint8]float32{1: 2.0},
 					},
-					&Resource{
-						ID: 3,
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              3,
+							CostPerLoadUnit: map[uint8]float32{1: 1.0},
+						},
+
 						schedule: map[TimeInterval]RunID{
 							{TimeStart: now + oneHour, TimeEnd: now + oneHour + halfHour}: Maintenance,
 						},
-						costPerLoadUnit: map[uint8]float32{1: 1.0},
 					},
 				},
 			},
@@ -417,13 +499,13 @@ func TestPopulatePossibilities(t *testing.T) {
 							)
 						}
 
-						if resources[i].costPerLoadUnit[1] != expectedResources[i].costPerLoadUnit[1] {
+						if resources[i].CostPerLoadUnit[1] != expectedResources[i].CostPerLoadUnit[1] {
 							t.Errorf(
 								"for interval %v, resource %d has wrong cost (expected %f, got %f)",
 								interval,
 								i,
-								expectedResources[i].costPerLoadUnit[1],
-								resources[i].costPerLoadUnit[1],
+								expectedResources[i].CostPerLoadUnit[1],
+								resources[i].CostPerLoadUnit[1],
 							)
 						}
 					}

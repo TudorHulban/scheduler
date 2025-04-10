@@ -14,17 +14,20 @@ type RunID int64
 
 const Maintenance = RunID(0)
 
-type Resource struct {
-	Name string
-
-	schedule        map[TimeInterval]RunID
-	costPerLoadUnit map[uint8]float32 // load unit | cost per unit
-
-	ID           int
-	ResourceType uint8
+type ResourceInfo struct {
+	Name            string
+	CostPerLoadUnit map[uint8]float32 // load unit | cost per unit
+	ID              int
+	ResourceType    uint8
 }
 
-func (r Resource) String() string {
+type ResourceScheduled struct {
+	ResourceInfo
+
+	schedule map[TimeInterval]RunID
+}
+
+func (r ResourceScheduled) String() string {
 	var sb strings.Builder
 
 	sb.WriteString("Resource{\n")
@@ -39,7 +42,7 @@ func (r Resource) String() string {
 
 	// Cost map
 	sb.WriteString("\tCostPerLoadUnit: map[uint8]float32{\n")
-	for unit, cost := range r.costPerLoadUnit {
+	for unit, cost := range r.CostPerLoadUnit {
 		sb.WriteString(fmt.Sprintf("\t\t%d: %f,\n", unit, cost))
 	}
 	sb.WriteString("\t},\n")
@@ -55,6 +58,7 @@ func (r Resource) String() string {
 type ParamsNewResource struct {
 	Name            string
 	CostPerLoadUnit map[uint8]float32
+	ID              int
 	ResourceType    uint8
 }
 
@@ -100,23 +104,27 @@ func (param *ParamsNewResource) IsValid() error {
 	return nil
 }
 
-func NewResource(params *ParamsNewResource) (*Resource, error) {
+func NewResource(params *ParamsNewResource) (*ResourceScheduled, error) {
 	if errValidation := params.IsValid(); errValidation != nil {
 		return nil,
 			errValidation
 	}
 
-	return &Resource{
-			Name:         params.Name,
-			ResourceType: params.ResourceType,
+	return &ResourceScheduled{
+			ResourceInfo: ResourceInfo{
+				ID:           params.ID,
+				Name:         params.Name,
+				ResourceType: params.ResourceType,
 
-			costPerLoadUnit: params.CostPerLoadUnit,
-			schedule:        make(map[TimeInterval]RunID),
+				CostPerLoadUnit: params.CostPerLoadUnit,
+			},
+
+			schedule: make(map[TimeInterval]RunID),
 		},
 		nil
 }
 
-func (res *Resource) GetSchedule() string {
+func (res *ResourceScheduled) GetSchedule() string {
 	if len(res.schedule) == 0 {
 		return "Schedule: (empty)"
 	}
@@ -164,7 +172,7 @@ type ParamsRun struct {
 }
 
 // ID = 0 reserved for Maintenance.
-func (res *Resource) AddRun(_ context.Context, params *ParamsRun) ([]TimeInterval, error) {
+func (res *ResourceScheduled) AddRun(_ context.Context, params *ParamsRun) ([]TimeInterval, error) {
 	if params.TimeStart >= params.TimeEnd {
 		return nil,
 			goerrors.ErrInvalidInput{
@@ -219,7 +227,7 @@ type ResponseGetRun struct {
 	AlreadyScheduledTaskEndTime int64
 }
 
-func (res *Resource) GetRun(atTimestamp, offset int64) (*ResponseGetRun, error) {
+func (res *ResourceScheduled) GetRun(atTimestamp, offset int64) (*ResponseGetRun, error) {
 	for interval, runID := range res.schedule {
 		offsetDifference := interval.SecondsOffset - offset
 
@@ -242,7 +250,7 @@ func (res *Resource) GetRun(atTimestamp, offset int64) (*ResponseGetRun, error) 
 		)
 }
 
-func (res *Resource) RemoveRun(runID RunID) error {
+func (res *ResourceScheduled) RemoveRun(runID RunID) error {
 	for interval, id := range res.schedule {
 		if id == runID {
 			delete(res.schedule, interval)
@@ -254,8 +262,8 @@ func (res *Resource) RemoveRun(runID RunID) error {
 	return fmt.Errorf("run %d not found in schedule", runID)
 }
 
-func (res *Resource) GetRunCost(run *Run) (float32, error) {
-	cost, exists := res.costPerLoadUnit[run.LoadUnit]
+func (res *ResourceScheduled) GetRunCost(run *Run) (float32, error) {
+	cost, exists := res.CostPerLoadUnit[run.LoadUnit]
 	if !exists {
 		return 0,
 			errors.New("unsupported load unit")

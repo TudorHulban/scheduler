@@ -12,7 +12,7 @@ func TestFindEarliestSlot(t *testing.T) {
 
 	tests := []struct {
 		name                   string
-		possibilities          map[TimeInterval][]*Resource
+		possibilities          map[TimeInterval][]*ResourceScheduled
 		neededCount            int
 		offsetDifference       int64
 		expectedTime           int64
@@ -21,13 +21,29 @@ func TestFindEarliestSlot(t *testing.T) {
 	}{
 		{
 			name: "1. Busy now, cheapest later",
-			possibilities: map[TimeInterval][]*Resource{
+			possibilities: map[TimeInterval][]*ResourceScheduled{
 				{TimeStart: now, TimeEnd: now + oneHour}: {
-					&Resource{ID: 2, costPerLoadUnit: map[uint8]float32{1: 3.0}}, // High-cost now
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              2,
+							CostPerLoadUnit: map[uint8]float32{1: 3.0}, // High-cost now
+						},
+					},
 				},
 				{TimeStart: now + oneHour, TimeEnd: now + 2*oneHour}: {
-					&Resource{ID: 1, costPerLoadUnit: map[uint8]float32{1: 2.0}}, // Cheaper later
-					&Resource{ID: 2, costPerLoadUnit: map[uint8]float32{1: 3.0}},
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              1,
+							CostPerLoadUnit: map[uint8]float32{1: 2.0}, // Cheaper later
+						},
+					},
+
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              2,
+							CostPerLoadUnit: map[uint8]float32{1: 3.0},
+						},
+					},
 				},
 			},
 			neededCount:      1,
@@ -39,14 +55,36 @@ func TestFindEarliestSlot(t *testing.T) {
 		},
 		{
 			name: "2. Busy now, cheaper later, multiple resources",
-			possibilities: map[TimeInterval][]*Resource{
+			possibilities: map[TimeInterval][]*ResourceScheduled{
 				{TimeStart: now, TimeEnd: now + oneHour}: {
-					&Resource{ID: 2, costPerLoadUnit: map[uint8]float32{1: 3.0}},
-					&Resource{ID: 3, costPerLoadUnit: map[uint8]float32{1: 3.0}},
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              2,
+							CostPerLoadUnit: map[uint8]float32{1: 3.0},
+						},
+					},
+
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              3,
+							CostPerLoadUnit: map[uint8]float32{1: 3.0},
+						},
+					},
 				},
 				{TimeStart: now + oneHour, TimeEnd: now + 2*oneHour}: {
-					&Resource{ID: 1, costPerLoadUnit: map[uint8]float32{1: 2.0}},
-					&Resource{ID: 2, costPerLoadUnit: map[uint8]float32{1: 3.0}},
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              1,
+							CostPerLoadUnit: map[uint8]float32{1: 2.0},
+						},
+					},
+
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							ID:              2,
+							CostPerLoadUnit: map[uint8]float32{1: 3.0},
+						},
+					},
 				},
 			},
 			neededCount:      2,
@@ -58,10 +96,19 @@ func TestFindEarliestSlot(t *testing.T) {
 		},
 		{
 			name: "3. Busy now, available next hour",
-			possibilities: map[TimeInterval][]*Resource{
+			possibilities: map[TimeInterval][]*ResourceScheduled{
 				{TimeStart: now + oneHour, TimeEnd: now + 2*oneHour}: {
-					&Resource{costPerLoadUnit: map[uint8]float32{1: 2.0}},
-					&Resource{costPerLoadUnit: map[uint8]float32{1: 3.0}},
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							CostPerLoadUnit: map[uint8]float32{1: 2.0},
+						},
+					},
+
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							CostPerLoadUnit: map[uint8]float32{1: 3.0},
+						},
+					},
 				},
 			},
 			neededCount:      1,
@@ -73,10 +120,19 @@ func TestFindEarliestSlot(t *testing.T) {
 		},
 		{
 			name: "4. Busy now, available next hour, multiple resources",
-			possibilities: map[TimeInterval][]*Resource{
+			possibilities: map[TimeInterval][]*ResourceScheduled{
 				{TimeStart: now + oneHour, TimeEnd: now + 2*oneHour}: {
-					&Resource{costPerLoadUnit: map[uint8]float32{1: 2.0}},
-					&Resource{costPerLoadUnit: map[uint8]float32{1: 3.0}},
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							CostPerLoadUnit: map[uint8]float32{1: 2.0},
+						},
+					},
+
+					&ResourceScheduled{
+						ResourceInfo: ResourceInfo{
+							CostPerLoadUnit: map[uint8]float32{1: 3.0},
+						},
+					},
 				},
 			},
 			neededCount:      2,
@@ -93,9 +149,11 @@ func TestFindEarliestSlot(t *testing.T) {
 			tt.name,
 			func(t *testing.T) {
 				earliest, resources := findEarliestSlot(
-					tt.possibilities,
-					tt.neededCount,
-					tt.offsetDifference,
+					&paramsFindEarliestSlot{
+						Possibilities:    tt.possibilities,
+						NeededCount:      tt.neededCount,
+						OffsetDifference: tt.offsetDifference,
+					},
 				)
 
 				if earliest != tt.expectedTime || len(resources) != tt.expectedResourcesCount {
@@ -123,7 +181,7 @@ func TestFindEarliestSlot(t *testing.T) {
 				var totalCost float32
 
 				for _, resource := range resources {
-					totalCost = totalCost + resource.costPerLoadUnit[1]
+					totalCost = totalCost + resource.CostPerLoadUnit[1]
 				}
 
 				require.Equal(t,

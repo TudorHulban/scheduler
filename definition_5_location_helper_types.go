@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-type ResourcesPerTimeInterval map[TimeInterval][]*Resource
+type ResourcesPerTimeInterval map[TimeInterval][]*ResourceScheduled
 
 func (rpt ResourcesPerTimeInterval) String() string {
 	var sb strings.Builder
@@ -50,7 +50,7 @@ func (rpt ResourcesPerTimeInterval) String() string {
 	return sb.String()
 }
 
-type ResourcesPerType map[uint8][]*Resource
+type ResourcesPerType map[uint8][]*ResourceScheduled
 
 func (rpt ResourcesPerType) String() string {
 	var sb strings.Builder
