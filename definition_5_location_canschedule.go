@@ -1,7 +1,9 @@
 package scheduler
 
 import (
+	"math"
 	"slices"
+	"sort"
 
 	goerrors "github.com/TudorHulban/go-errors"
 )
@@ -81,12 +83,16 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 		}
 
 		if earliest == params.TimeStart {
+			// Schedule all resources atomically
+			timeInterval := TimeInterval{
+				TimeStart:     earliest + offsetDifference,
+				TimeEnd:       earliest + params.TaskRun.EstimatedDuration + offsetDifference,
+				SecondsOffset: loc.LocationOffset,
+			}
+			runID := RunID(params.TaskRun.ID)
+
 			for _, resource := range selectedResources {
-				resource.schedule[TimeInterval{
-					TimeStart:     earliest + offsetDifference,
-					TimeEnd:       earliest + params.TaskRun.EstimatedDuration + offsetDifference,
-					SecondsOffset: loc.LocationOffset,
-				}] = RunID(params.TaskRun.ID)
+				resource.schedule[timeInterval] = runID
 			}
 
 			return &ResponseCanRun{
@@ -105,9 +111,12 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 			nil
 	}
 
-	earliestFallback := _NoAvailability
-	fallbackByTime := make(map[int64][]*Resource)
-	totalCost = 0
+	// More efficient algorithm for finding fallback resources
+	resourcesByType := make(map[uint8][]*Resource)
+	earliestByResource := make(map[*Resource]int64)
+	costByResource := make(map[*Resource]float32)
+
+	// First gather availability information for all resources
 	for _, res := range loc.Resources {
 		if slices.Contains(resourceTypesNeeded, res.ResourceType) {
 			when := res.findAvailableTime(
@@ -119,67 +128,160 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 					SecondsOffsetLocation: loc.LocationOffset,
 				},
 			)
+
 			if when != _NoAvailability {
 				whenTaskTime := when - offsetDifference
-				fallbackByTime[whenTaskTime] = append(fallbackByTime[whenTaskTime], res)
-				if earliestFallback == _NoAvailability || whenTaskTime < earliestFallback {
-					earliestFallback = whenTaskTime
-				}
+				resourcesByType[res.ResourceType] = append(resourcesByType[res.ResourceType], res)
+				earliestByResource[res] = whenTaskTime
+
+				// Cache cost calculation
+				cost, _ := calculateTaskCost(params.TaskRun, res)
+				costByResource[res] = cost
 			}
 		}
 	}
 
-	var fallbackResources []*Resource
+	// Check if we have enough resources of each type
+	for rType, needed := range resourcesNeededPerType {
+		if len(resourcesByType[rType]) < int(needed) {
+			// Not enough resources of this type available
+			return &ResponseCanRun{
+				WhenCanStart: params.TimeEnd,
+				Cost:         0,
+				WasScheduled: false,
+			}, nil
+		}
+	}
 
-	if earliestFallback != _NoAvailability {
-		for whenTaskTime := earliestFallback; whenTaskTime <= end; whenTaskTime++ {
-			typeCounts := make(map[uint8]int)
-			availableResources := make([]*Resource, 0)
-			// Check resources available at or before this time
-			for t := earliestFallback; t <= whenTaskTime; t++ {
-				if resources, ok := fallbackByTime[t]; ok {
-					for _, res := range resources {
-						if typeCounts[res.ResourceType] < int(resourcesNeededPerType[res.ResourceType]) {
-							availableResources = append(availableResources, res)
-							typeCounts[res.ResourceType]++
-						}
-					}
-				}
+	// Group resources by their earliest available time
+	timeToResources := make(map[int64][]*Resource)
+	var allTimes []int64
+
+	for _, resources := range resourcesByType {
+		for _, res := range resources {
+			t := earliestByResource[res]
+			timeToResources[t] = append(timeToResources[t], res)
+			// Keep track of unique times
+			if len(timeToResources[t]) == 1 {
+				allTimes = append(allTimes, t)
 			}
-			if len(availableResources) >= totalNeeded {
-				earliestFallback = whenTaskTime
-				fallbackResources = availableResources[:totalNeeded]
-				totalCost = 0
-				for _, res := range fallbackResources {
-					cost, _ := calculateTaskCost(params.TaskRun, res)
-					totalCost += cost
-				}
+		}
+	}
+
+	// Sort times
+	sort.Slice(allTimes, func(i, j int) bool {
+		return allTimes[i] < allTimes[j]
+	})
+
+	// Find the earliest time where we can schedule all required resources
+	earliestFallback := _NoAvailability
+	var selectedCombination []*Resource
+	lowestCost := float32(math.MaxFloat32)
+
+	// For each possible start time
+	for _, startTime := range allTimes {
+		if startTime > params.TimeEnd {
+			break
+		}
+
+		// Collect all available resources at or before this time
+		availableResources := make(map[uint8][]*Resource)
+		for t := allTimes[0]; t <= startTime; t++ {
+			for _, res := range timeToResources[t] {
+				availableResources[res.ResourceType] = append(availableResources[res.ResourceType], res)
+			}
+		}
+
+		// Check if we have enough resources of each type
+		hasEnough := true
+		for rType, needed := range resourcesNeededPerType {
+			if len(availableResources[rType]) < int(needed) {
+				hasEnough = false
 				break
 			}
 		}
-	}
 
-	if earliestFallback != _NoAvailability && len(fallbackResources) == totalNeeded {
-		if earliestFallback == params.TimeStart {
-			for _, resource := range fallbackResources {
-				resource.schedule[TimeInterval{
-					TimeStart:     earliestFallback + offsetDifference,
-					TimeEnd:       earliestFallback + params.TaskRun.EstimatedDuration + offsetDifference,
-					SecondsOffset: loc.LocationOffset,
-				}] = RunID(params.TaskRun.ID)
+		if !hasEnough {
+			continue
+		}
+
+		// Try all possible combinations of resources to find cheapest
+		combinations := generateCheapestCombinations(availableResources, resourcesNeededPerType, costByResource)
+
+		for _, combo := range combinations {
+			// Calculate total cost
+			comboCost := float32(0)
+			for _, res := range combo {
+				comboCost += costByResource[res]
+			}
+
+			if comboCost < lowestCost {
+				lowestCost = comboCost
+				selectedCombination = combo
+				earliestFallback = startTime
 			}
 		}
+
+		// If we found a valid combination, we can stop looking
+		if len(selectedCombination) == totalNeeded {
+			break
+		}
+	}
+
+	if earliestFallback != _NoAvailability && len(selectedCombination) == totalNeeded {
+		// Schedule if we're starting immediately
+		if earliestFallback == params.TimeStart {
+			// Schedule all resources atomically
+			timeInterval := TimeInterval{
+				TimeStart:     earliestFallback + offsetDifference,
+				TimeEnd:       earliestFallback + params.TaskRun.EstimatedDuration + offsetDifference,
+				SecondsOffset: loc.LocationOffset,
+			}
+			runID := RunID(params.TaskRun.ID)
+
+			for _, resource := range selectedCombination {
+				resource.schedule[timeInterval] = runID
+			}
+		}
+
 		return &ResponseCanRun{
 			WhenCanStart: earliestFallback,
-			Cost:         totalCost,
+			Cost:         lowestCost,
 			WasScheduled: earliestFallback == params.TimeStart,
 		}, nil
 	}
 
 	return &ResponseCanRun{
 			WhenCanStart: params.TimeEnd,
-			Cost:         totalCost,
+			Cost:         0,
 			WasScheduled: false,
 		},
 		nil
+}
+
+// Helper function to generate the cheapest resource combinations
+func generateCheapestCombinations(availableResources map[uint8][]*Resource, resourcesNeededPerType map[uint8]uint16, costByResource map[*Resource]float32) [][]*Resource {
+	// For each resource type, sort by cost
+	for rType, resources := range availableResources {
+		sort.Slice(resources, func(i, j int) bool {
+			return costByResource[resources[i]] < costByResource[resources[j]]
+		})
+
+		// Keep only the N cheapest resources we need
+		needed := int(resourcesNeededPerType[rType])
+		if needed > 0 && len(resources) > needed {
+			availableResources[rType] = resources[:needed]
+		}
+	}
+
+	// Build the cheapest combination
+	var cheapestCombo []*Resource
+	for rType, resources := range availableResources {
+		needed := int(resourcesNeededPerType[rType])
+		if needed > 0 {
+			cheapestCombo = append(cheapestCombo, resources[:needed]...)
+		}
+	}
+
+	return [][]*Resource{cheapestCombo}
 }

@@ -403,7 +403,7 @@ func TestCanSchedule(t *testing.T) {
 			},
 
 			expectedResult: ResponseCanRun{
-				WhenCanStart: now + oneHour, // Gap between busy periods
+				WhenCanStart: now + oneHour,
 				Cost:         2.0,
 				WasScheduled: false,
 			},
