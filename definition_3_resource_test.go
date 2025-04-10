@@ -161,7 +161,7 @@ func TestLifeCycleResource(t *testing.T) {
 	)
 
 	require.NoError(t,
-		res.RemoveRun(idRun),
+		res.removeRun(idRun),
 	)
 
 	responseRemovedTask1000, errGetRemoved1000 := res.GetRun(1000, 7200)

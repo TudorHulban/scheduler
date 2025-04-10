@@ -21,6 +21,7 @@ type ResourceInfo struct {
 	ResourceType    uint8
 }
 
+// ResourceScheduled is mutex protected through Location ops.
 type ResourceScheduled struct {
 	ResourceInfo
 
@@ -250,7 +251,8 @@ func (res *ResourceScheduled) GetRun(atTimestamp, offset int64) (*ResponseGetRun
 		)
 }
 
-func (res *ResourceScheduled) RemoveRun(runID RunID) error {
+// removeRun should be called through Location which is mutex protected.
+func (res *ResourceScheduled) removeRun(runID RunID) error {
 	for interval, id := range res.schedule {
 		if id == runID {
 			delete(res.schedule, interval)

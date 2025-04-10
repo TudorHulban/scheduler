@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -63,12 +64,7 @@ func (rpt ResourcesPerType) String() string {
 		types = append(types, t)
 	}
 
-	sort.Slice(
-		types,
-		func(i, j int) bool {
-			return types[i] < types[j]
-		},
-	)
+	slices.Sort(types)
 
 	for _, t := range types {
 		resources := rpt[t]

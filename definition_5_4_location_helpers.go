@@ -5,15 +5,6 @@ import (
 	"sort"
 )
 
-type paramsPopulatePossibilities struct {
-	Candidates             map[uint8][]*ResourceScheduled
-	ResourcesNeededPerType map[uint8]uint16
-
-	TimeInterval
-
-	Duration int64
-}
-
 type paramsFindEarliestSlot struct {
 	Possibilities    ResourcesPerTimeInterval
 	NeededCount      int
@@ -54,6 +45,15 @@ func findEarliestSlot(params *paramsFindEarliestSlot) (int64, []*ResourceSchedul
 
 	return earliest,
 		bestResources
+}
+
+type paramsPopulatePossibilities struct {
+	Candidates             map[uint8][]*ResourceScheduled
+	ResourcesNeededPerType map[uint8]uint16
+
+	TimeInterval
+
+	Duration int64
 }
 
 func populatePossibilities(params *paramsPopulatePossibilities) ResourcesPerTimeInterval {

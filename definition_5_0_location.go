@@ -3,6 +3,7 @@ package scheduler
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	goerrors "github.com/TudorHulban/go-errors"
 	"github.com/asaskevich/govalidator"
@@ -11,6 +12,7 @@ import (
 type Location struct {
 	Name      string
 	Resources []*ResourceScheduled
+	mu        sync.Mutex
 
 	ID             int64
 	LocationOffset int64

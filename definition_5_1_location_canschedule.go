@@ -3,29 +3,25 @@ package scheduler
 import (
 	"math"
 	"slices"
-	"sort"
 
 	goerrors "github.com/TudorHulban/go-errors"
 )
 
-type ResponseCanRun struct {
-	WhenCanStart int64
-	Cost         float32
-	WasScheduled bool
+type ResponseGetPossibilities struct {
+	Possibilities ResourcesPerTimeInterval
+
+	resourceTypesNeeded    []uint8
+	resourcesNeededPerType map[uint8]uint16
+
+	offsetedTimeInterval TimeInterval
 }
 
-// CanSchedule returns zero for WhenCanStart if it can run within passed interval and
-// also schedules the task to the cheapest available resource and provides the cost.
-//
-// If it cannot run at TimeStart, it provides the timestamp
-// from which it could in WhenCanStart and the cost of this run.
-func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) {
-	defer traceExit()
-
+// GetPossibilities returns all possible time slots when resources are available
+func (loc *Location) GetPossibilities(params *ParamsCanRun) (*ResponseGetPossibilities, error) {
 	if params.TimeEnd-params.TimeStart < params.TaskRun.EstimatedDuration {
 		return nil,
 			goerrors.ErrValidation{
-				Caller: "CanSchedule",
+				Caller: "GetPossibilities",
 				Issue: goerrors.ErrInvalidInput{
 					InputName: "ParamsCanRun - interval too short",
 				},
@@ -46,34 +42,62 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 	}
 
 	offsetDifference := params.SecondsOffset - loc.LocationOffset
-	start := params.TimeStart + offsetDifference
-	end := params.TimeEnd + offsetDifference
+
+	offsetedTimeInterval := TimeInterval{
+		TimeStart:     params.TimeStart + offsetDifference,
+		TimeEnd:       params.TimeEnd + offsetDifference,
+		SecondsOffset: offsetDifference,
+	}
 
 	possibilities := populatePossibilities(
 		&paramsPopulatePossibilities{
 			Candidates:             resourceTypeCandidates,
 			ResourcesNeededPerType: resourcesNeededPerType,
-			TimeInterval: TimeInterval{
-				TimeStart:     start,
-				TimeEnd:       end,
-				SecondsOffset: loc.LocationOffset,
-			},
+			TimeInterval:           offsetedTimeInterval,
 
 			Duration: params.TaskRun.EstimatedDuration,
 		},
 	)
 
+	return &ResponseGetPossibilities{
+			Possibilities: possibilities,
+
+			resourceTypesNeeded:    resourceTypesNeeded,
+			resourcesNeededPerType: resourcesNeededPerType,
+			offsetedTimeInterval:   offsetedTimeInterval,
+		},
+		nil
+}
+
+type ResponseCanRun struct {
+	WhenCanStart int64
+	Cost         float32
+	WasScheduled bool
+}
+
+// CanSchedule returns zero for WhenCanStart if it can run within passed interval and
+// also schedules the task to the cheapest available resource and provides the cost.
+//
+// If it cannot run at TimeStart, it provides the timestamp
+// from which it could in WhenCanStart and the cost of this run.
+func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) {
+	possibilitiesResp, errGet := loc.GetPossibilities(params)
+	if errGet != nil {
+		return nil,
+			errGet
+	}
+
 	var totalNeeded int
 
-	for _, qty := range resourcesNeededPerType {
+	for _, qty := range possibilitiesResp.resourcesNeededPerType {
 		totalNeeded = totalNeeded + int(qty)
 	}
 
 	earliest, selectedResources := findEarliestSlot(
 		&paramsFindEarliestSlot{
-			Possibilities:    possibilities,
+			Possibilities:    possibilitiesResp.Possibilities,
 			NeededCount:      totalNeeded,
-			OffsetDifference: offsetDifference,
+			OffsetDifference: possibilitiesResp.offsetedTimeInterval.SecondsOffset,
 		},
 	)
 
@@ -88,8 +112,8 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 		if earliest == params.TimeStart {
 			// Schedule all resources atomically
 			timeInterval := TimeInterval{
-				TimeStart:     earliest + offsetDifference,
-				TimeEnd:       earliest + params.TaskRun.EstimatedDuration + offsetDifference,
+				TimeStart:     earliest + possibilitiesResp.offsetedTimeInterval.SecondsOffset,
+				TimeEnd:       earliest + params.TaskRun.EstimatedDuration + possibilitiesResp.offsetedTimeInterval.SecondsOffset,
 				SecondsOffset: loc.LocationOffset,
 			}
 			runID := RunID(params.TaskRun.ID)
@@ -121,11 +145,11 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 
 	// First gather availability information for all resources
 	for _, res := range loc.Resources {
-		if slices.Contains(resourceTypesNeeded, res.ResourceType) {
+		if slices.Contains(possibilitiesResp.resourceTypesNeeded, res.ResourceType) {
 			when := res.findAvailableTime(
 				&paramsFindAvailableTime{
-					TimeStart:             start,
-					MaximumTimeStart:      end + params.TaskRun.EstimatedDuration,
+					TimeStart:             possibilitiesResp.offsetedTimeInterval.TimeStart,
+					MaximumTimeStart:      possibilitiesResp.offsetedTimeInterval.TimeEnd + params.TaskRun.EstimatedDuration,
 					SecondsDuration:       params.TaskRun.EstimatedDuration,
 					SecondsOffsetTask:     params.SecondsOffset,
 					SecondsOffsetLocation: loc.LocationOffset,
@@ -133,7 +157,7 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 			)
 
 			if when != _NoAvailability {
-				whenTaskTime := when - offsetDifference
+				whenTaskTime := when - possibilitiesResp.offsetedTimeInterval.SecondsOffset
 				resourcesByType[res.ResourceType] = append(resourcesByType[res.ResourceType], res)
 				earliestByResource[res] = whenTaskTime
 
@@ -145,7 +169,7 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 	}
 
 	// Check if we have enough resources of each type
-	for resourceType, needed := range resourcesNeededPerType {
+	for resourceType, needed := range possibilitiesResp.resourcesNeededPerType {
 		if len(resourcesByType[resourceType]) < int(needed) {
 			// Not enough resources of this type available
 			return &ResponseCanRun{
@@ -173,12 +197,7 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 		}
 	}
 
-	sort.Slice(
-		allTimes,
-		func(i, j int) bool {
-			return allTimes[i] < allTimes[j]
-		},
-	)
+	slices.Sort(allTimes)
 
 	// Find the earliest time where we can schedule all required resources
 	earliestFallback := _NoAvailability
@@ -204,7 +223,7 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 
 		// Check if we have enough resources of each type
 		hasEnough := true
-		for rType, needed := range resourcesNeededPerType {
+		for rType, needed := range possibilitiesResp.resourcesNeededPerType {
 			if len(availableResources[rType]) < int(needed) {
 				hasEnough = false
 
@@ -220,7 +239,7 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 		combinations := generateCheapestCombinations(
 			&paramsGenerateCheapestCombinations{
 				AvailableResources:     availableResources,
-				ResourcesNeededPerType: resourcesNeededPerType,
+				ResourcesNeededPerType: possibilitiesResp.resourcesNeededPerType,
 				CostByResource:         costByResource,
 			},
 		)
@@ -250,8 +269,8 @@ func (loc *Location) CanSchedule(params *ParamsCanRun) (*ResponseCanRun, error) 
 		if earliestFallback == params.TimeStart {
 			// Schedule all resources atomically
 			timeInterval := TimeInterval{
-				TimeStart:     earliestFallback + offsetDifference,
-				TimeEnd:       earliestFallback + params.TaskRun.EstimatedDuration + offsetDifference,
+				TimeStart:     earliestFallback + possibilitiesResp.offsetedTimeInterval.SecondsOffset,
+				TimeEnd:       earliestFallback + params.TaskRun.EstimatedDuration + possibilitiesResp.offsetedTimeInterval.SecondsOffset,
 				SecondsOffset: loc.LocationOffset,
 			}
 
