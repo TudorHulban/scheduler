@@ -51,6 +51,16 @@ func TestGetSchedulingOptions(t *testing.T) {
 						{TimeStart: now, TimeEnd: now + halfHour}: Maintenance,
 					},
 				},
+				{
+					ResourceInfo: ResourceInfo{
+						ID:              4,
+						Name:            "Resource 4",
+						CostPerLoadUnit: map[uint8]float32{1: 1.0},
+						ResourceType:    2,
+					},
+
+					schedule: map[TimeInterval]RunID{},
+				},
 			},
 		},
 	)
@@ -59,6 +69,8 @@ func TestGetSchedulingOptions(t *testing.T) {
 
 	options, errGetOptions := location.GetSchedulingOptions(
 		&ParamsCanRun{
+			AllPossibilities: true,
+
 			TimeInterval: TimeInterval{
 				TimeStart: now,
 				TimeEnd:   now + 2*oneHour,
@@ -69,8 +81,12 @@ func TestGetSchedulingOptions(t *testing.T) {
 				EstimatedDuration: halfHour,
 
 				Dependencies: []RunDependency{
-					RunDependency{
+					{
 						ResourceType:     1,
+						ResourceQuantity: 1,
+					},
+					{
+						ResourceType:     2,
 						ResourceQuantity: 1,
 					},
 				},

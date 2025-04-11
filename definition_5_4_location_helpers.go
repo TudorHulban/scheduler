@@ -53,7 +53,8 @@ type paramsPopulatePossibilities struct {
 
 	TimeInterval
 
-	Duration int64
+	Duration         int64
+	AllPossibilities bool
 }
 
 func populatePossibilities(params *paramsPopulatePossibilities) ResourcesPerTimeInterval {
@@ -66,6 +67,7 @@ func populatePossibilities(params *paramsPopulatePossibilities) ResourcesPerTime
 
 			if availableEntireInterval {
 				noIntervals := params.TimeInterval.NoIntervals(params.Duration)
+
 				for i := 0; i < noIntervals; i++ {
 					timeStart := params.TimeStart + int64(i)*params.Duration
 					slot := TimeInterval{
@@ -73,27 +75,32 @@ func populatePossibilities(params *paramsPopulatePossibilities) ResourcesPerTime
 						TimeEnd:       timeStart + params.Duration,
 						SecondsOffset: params.TimeInterval.SecondsOffset,
 					}
+
 					current := typeSlots[slot]
 					if current == nil {
 						current = make(ResourcesPerType)
 						typeSlots[slot] = current
 					}
+
 					current[resourceType] = append(current[resourceType], candidate)
 				}
 			} else {
 				for _, slot := range availSlots {
 					exactSlots := slot.BreakDown(params.Duration)
+
 					for _, exactSlot := range exactSlots {
 						normalizedSlot := TimeInterval{
 							TimeStart:     exactSlot.TimeStart,
 							TimeEnd:       exactSlot.TimeEnd,
 							SecondsOffset: params.TimeInterval.SecondsOffset,
 						}
+
 						current := typeSlots[normalizedSlot]
 						if current == nil {
 							current = make(ResourcesPerType)
 							typeSlots[normalizedSlot] = current
 						}
+
 						current[resourceType] = append(current[resourceType], candidate)
 					}
 				}
@@ -101,28 +108,129 @@ func populatePossibilities(params *paramsPopulatePossibilities) ResourcesPerTime
 		}
 	}
 
-	// Filter slots meeting all type-quantity requirements
+	// Filter slots based on AllPossibilities
 	for slot, resourcesByType := range typeSlots {
 		allSatisfied := true
 		var slotResources []*ResourceScheduled
-		for resourceType, needed := range params.ResourcesNeededPerType {
-			if len(resourcesByType[resourceType]) < int(needed) {
-				allSatisfied = false
-				break
+
+		if params.AllPossibilities {
+			// Include all available resources
+			for resourceType := range resourcesByType {
+				sort.Slice(
+					resourcesByType[resourceType],
+					func(i, j int) bool {
+						return resourcesByType[resourceType][i].CostPerLoadUnit[1] <
+							resourcesByType[resourceType][j].CostPerLoadUnit[1]
+					},
+				)
+				slotResources = append(slotResources, resourcesByType[resourceType]...)
 			}
-			sort.Slice(
-				resourcesByType[resourceType],
-				func(i, j int) bool {
-					return resourcesByType[resourceType][i].CostPerLoadUnit[1] <
-						resourcesByType[resourceType][j].CostPerLoadUnit[1]
-				},
-			)
-			slotResources = append(slotResources, resourcesByType[resourceType][:int(needed)]...)
-		}
-		if allSatisfied {
-			result[slot] = slotResources
+			if len(slotResources) > 0 {
+				result[slot] = slotResources
+			}
+		} else {
+			// Original logic: exact quantity needed
+			for resourceType, needed := range params.ResourcesNeededPerType {
+				if len(resourcesByType[resourceType]) < int(needed) {
+					allSatisfied = false
+					break
+				}
+
+				sort.Slice(
+					resourcesByType[resourceType],
+					func(i, j int) bool {
+						return resourcesByType[resourceType][i].CostPerLoadUnit[1] <
+							resourcesByType[resourceType][j].CostPerLoadUnit[1]
+					},
+				)
+				slotResources = append(slotResources, resourcesByType[resourceType][:int(needed)]...)
+			}
+
+			if allSatisfied {
+				result[slot] = slotResources
+			}
 		}
 	}
 
 	return result
 }
+
+// func populatePossibilities(params *paramsPopulatePossibilities) ResourcesPerTimeInterval {
+// 	result := make(ResourcesPerTimeInterval)
+// 	typeSlots := make(map[TimeInterval]ResourcesPerType)
+
+// 	for resourceType, candidates := range params.Candidates {
+// 		for _, candidate := range candidates {
+// 			availSlots, availableEntireInterval := candidate.GetAvailability(&params.TimeInterval)
+
+// 			if availableEntireInterval {
+// 				noIntervals := params.TimeInterval.NoIntervals(params.Duration)
+
+// 				for i := 0; i < noIntervals; i++ {
+// 					timeStart := params.TimeStart + int64(i)*params.Duration
+// 					slot := TimeInterval{
+// 						TimeStart:     timeStart,
+// 						TimeEnd:       timeStart + params.Duration,
+// 						SecondsOffset: params.TimeInterval.SecondsOffset,
+// 					}
+
+// 					current := typeSlots[slot]
+// 					if current == nil {
+// 						current = make(ResourcesPerType)
+// 						typeSlots[slot] = current
+// 					}
+
+// 					current[resourceType] = append(current[resourceType], candidate)
+// 				}
+// 			} else {
+// 				for _, slot := range availSlots {
+// 					exactSlots := slot.BreakDown(params.Duration)
+
+// 					for _, exactSlot := range exactSlots {
+// 						normalizedSlot := TimeInterval{
+// 							TimeStart:     exactSlot.TimeStart,
+// 							TimeEnd:       exactSlot.TimeEnd,
+// 							SecondsOffset: params.TimeInterval.SecondsOffset,
+// 						}
+
+// 						current := typeSlots[normalizedSlot]
+// 						if current == nil {
+// 							current = make(ResourcesPerType)
+// 							typeSlots[normalizedSlot] = current
+// 						}
+
+// 						current[resourceType] = append(current[resourceType], candidate)
+// 					}
+// 				}
+// 			}
+// 		}
+// 	}
+
+// 	// Filter slots meeting all type-quantity requirements
+// 	for slot, resourcesByType := range typeSlots {
+// 		allSatisfied := true
+// 		var slotResources []*ResourceScheduled
+
+// 		for resourceType, needed := range params.ResourcesNeededPerType {
+// 			if len(resourcesByType[resourceType]) < int(needed) {
+// 				allSatisfied = false
+// 				break
+// 			}
+
+// 			sort.Slice(
+// 				resourcesByType[resourceType],
+// 				func(i, j int) bool {
+// 					return resourcesByType[resourceType][i].CostPerLoadUnit[1] <
+// 						resourcesByType[resourceType][j].CostPerLoadUnit[1]
+// 				},
+// 			)
+// 			slotResources = append(slotResources, resourcesByType[resourceType][:int(needed)]...)
+// 		}
+
+// 		if allSatisfied {
+// 			result[slot] = slotResources
+// 		}
+// 	}
+
+// 	return result
+// }

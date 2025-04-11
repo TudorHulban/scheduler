@@ -15,7 +15,7 @@ type ResponseGetPossibilities struct {
 	offsetedTimeInterval TimeInterval
 }
 
-// GetPossibilities returns all possible time slots when resources are available
+// GetPossibilities returns all possible time slots when resources are available if all possibilities is true.
 func (loc *Location) GetPossibilities(params *ParamsCanRun) (*ResponseGetPossibilities, error) {
 	if params.TimeEnd-params.TimeStart < params.TaskRun.EstimatedDuration {
 		return nil,
@@ -55,6 +55,8 @@ func (loc *Location) GetPossibilities(params *ParamsCanRun) (*ResponseGetPossibi
 			TimeInterval:           offsetedTimeInterval,
 
 			Duration: params.TaskRun.EstimatedDuration,
+
+			AllPossibilities: params.AllPossibilities,
 		},
 	)
 
