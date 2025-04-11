@@ -22,6 +22,7 @@ func TestPopulatePossibilities(t *testing.T) {
 							ResourceInfo: ResourceInfo{
 								ID:              1,
 								CostPerLoadUnit: map[uint8]float32{1: 2.0},
+								ResourceType:    1,
 							},
 
 							schedule: map[TimeInterval]RunID{},
@@ -39,6 +40,7 @@ func TestPopulatePossibilities(t *testing.T) {
 						ResourceInfo: ResourceInfo{
 							ID:              1,
 							CostPerLoadUnit: map[uint8]float32{1: 2.0},
+							ResourceType:    1,
 						},
 
 						schedule: map[TimeInterval]RunID{},
@@ -55,6 +57,7 @@ func TestPopulatePossibilities(t *testing.T) {
 							ResourceInfo: ResourceInfo{
 								ID:              1,
 								CostPerLoadUnit: map[uint8]float32{1: 2.0},
+								ResourceType:    1,
 							},
 
 							schedule: map[TimeInterval]RunID{},
@@ -63,6 +66,7 @@ func TestPopulatePossibilities(t *testing.T) {
 							ResourceInfo: ResourceInfo{
 								ID:              2,
 								CostPerLoadUnit: map[uint8]float32{1: 3.0},
+								ResourceType:    1,
 							},
 
 							schedule: map[TimeInterval]RunID{
@@ -82,6 +86,7 @@ func TestPopulatePossibilities(t *testing.T) {
 						ResourceInfo: ResourceInfo{
 							ID:              1,
 							CostPerLoadUnit: map[uint8]float32{1: 2.0},
+							ResourceType:    1,
 						},
 
 						schedule: map[TimeInterval]RunID{},
@@ -98,6 +103,7 @@ func TestPopulatePossibilities(t *testing.T) {
 							ResourceInfo: ResourceInfo{
 								ID:              1,
 								CostPerLoadUnit: map[uint8]float32{1: 2.0},
+								ResourceType:    1,
 							},
 
 							schedule: map[TimeInterval]RunID{
@@ -118,6 +124,7 @@ func TestPopulatePossibilities(t *testing.T) {
 						ResourceInfo: ResourceInfo{
 							ID:              1,
 							CostPerLoadUnit: map[uint8]float32{1: 2.0},
+							ResourceType:    1,
 						},
 
 						schedule: map[TimeInterval]RunID{
@@ -137,6 +144,7 @@ func TestPopulatePossibilities(t *testing.T) {
 							ResourceInfo: ResourceInfo{
 								ID:              1,
 								CostPerLoadUnit: map[uint8]float32{1: 2.0},
+								ResourceType:    1,
 							},
 
 							schedule: map[TimeInterval]RunID{
@@ -148,6 +156,7 @@ func TestPopulatePossibilities(t *testing.T) {
 							ResourceInfo: ResourceInfo{
 								ID:              2,
 								CostPerLoadUnit: map[uint8]float32{1: 3.0},
+								ResourceType:    1,
 							},
 
 							schedule: map[TimeInterval]RunID{
@@ -167,6 +176,7 @@ func TestPopulatePossibilities(t *testing.T) {
 						ResourceInfo: ResourceInfo{
 							ID:              1,
 							CostPerLoadUnit: map[uint8]float32{1: 2.0},
+							ResourceType:    1,
 						},
 
 						schedule: map[TimeInterval]RunID{
@@ -196,6 +206,7 @@ func TestPopulatePossibilities(t *testing.T) {
 							ResourceInfo: ResourceInfo{
 								ID:              1,
 								CostPerLoadUnit: map[uint8]float32{1: 2.0},
+								ResourceType:    1,
 							},
 
 							schedule: map[TimeInterval]RunID{
@@ -220,6 +231,7 @@ func TestPopulatePossibilities(t *testing.T) {
 							ResourceInfo: ResourceInfo{
 								ID:              1,
 								CostPerLoadUnit: map[uint8]float32{1: 2.0},
+								ResourceType:    1,
 							},
 
 							schedule: map[TimeInterval]RunID{
@@ -239,6 +251,7 @@ func TestPopulatePossibilities(t *testing.T) {
 						ResourceInfo: ResourceInfo{
 							ID:              1,
 							CostPerLoadUnit: map[uint8]float32{1: 2.0},
+							ResourceType:    1,
 						},
 
 						schedule: map[TimeInterval]RunID{
@@ -257,6 +270,7 @@ func TestPopulatePossibilities(t *testing.T) {
 							ResourceInfo: ResourceInfo{
 								ID:              1,
 								CostPerLoadUnit: map[uint8]float32{1: 2.0},
+								ResourceType:    1,
 							},
 
 							schedule: map[TimeInterval]RunID{
@@ -268,6 +282,7 @@ func TestPopulatePossibilities(t *testing.T) {
 							ResourceInfo: ResourceInfo{
 								ID:              2,
 								CostPerLoadUnit: map[uint8]float32{1: 3.0},
+								ResourceType:    1,
 							},
 
 							schedule: map[TimeInterval]RunID{},
@@ -288,6 +303,7 @@ func TestPopulatePossibilities(t *testing.T) {
 						ResourceInfo: ResourceInfo{
 							ID:              2,
 							CostPerLoadUnit: map[uint8]float32{1: 3.0},
+							ResourceType:    1,
 						},
 
 						schedule: map[TimeInterval]RunID{},
@@ -298,6 +314,7 @@ func TestPopulatePossibilities(t *testing.T) {
 						ResourceInfo: ResourceInfo{
 							ID:              2,
 							CostPerLoadUnit: map[uint8]float32{1: 3.0},
+							ResourceType:    1,
 						},
 
 						schedule: map[TimeInterval]RunID{},
@@ -308,6 +325,7 @@ func TestPopulatePossibilities(t *testing.T) {
 						ResourceInfo: ResourceInfo{
 							ID:              1,
 							CostPerLoadUnit: map[uint8]float32{1: 2.0},
+							ResourceType:    1,
 						},
 
 						schedule: map[TimeInterval]RunID{},
@@ -318,6 +336,7 @@ func TestPopulatePossibilities(t *testing.T) {
 						ResourceInfo: ResourceInfo{
 							ID:              1,
 							CostPerLoadUnit: map[uint8]float32{1: 2.0},
+							ResourceType:    1,
 						},
 
 						schedule: map[TimeInterval]RunID{},
@@ -335,6 +354,7 @@ func TestPopulatePossibilities(t *testing.T) {
 							ResourceInfo: ResourceInfo{
 								ID:              1,
 								CostPerLoadUnit: map[uint8]float32{1: 2.0},
+								ResourceType:    1,
 							},
 
 							schedule: map[TimeInterval]RunID{
@@ -346,6 +366,7 @@ func TestPopulatePossibilities(t *testing.T) {
 							ResourceInfo: ResourceInfo{
 								ID:              2,
 								CostPerLoadUnit: map[uint8]float32{1: 3.0},
+								ResourceType:    1,
 							},
 
 							schedule: map[TimeInterval]RunID{
@@ -358,6 +379,7 @@ func TestPopulatePossibilities(t *testing.T) {
 							ResourceInfo: ResourceInfo{
 								ID:              3,
 								CostPerLoadUnit: map[uint8]float32{1: 1.0},
+								ResourceType:    2,
 							},
 
 							schedule: map[TimeInterval]RunID{
@@ -383,6 +405,7 @@ func TestPopulatePossibilities(t *testing.T) {
 						ResourceInfo: ResourceInfo{
 							ID:              2,
 							CostPerLoadUnit: map[uint8]float32{1: 3.0},
+							ResourceType:    1,
 						},
 
 						schedule: map[TimeInterval]RunID{
@@ -393,6 +416,7 @@ func TestPopulatePossibilities(t *testing.T) {
 						ResourceInfo: ResourceInfo{
 							ID:              3,
 							CostPerLoadUnit: map[uint8]float32{1: 1.0},
+							ResourceType:    1,
 						},
 
 						schedule: map[TimeInterval]RunID{
@@ -405,6 +429,7 @@ func TestPopulatePossibilities(t *testing.T) {
 						ResourceInfo: ResourceInfo{
 							ID:              2,
 							CostPerLoadUnit: map[uint8]float32{1: 3.0},
+							ResourceType:    1,
 						},
 
 						schedule: map[TimeInterval]RunID{
@@ -415,6 +440,7 @@ func TestPopulatePossibilities(t *testing.T) {
 						ResourceInfo: ResourceInfo{
 							ID:              3,
 							CostPerLoadUnit: map[uint8]float32{1: 1.0},
+							ResourceType:    1,
 						},
 
 						schedule: map[TimeInterval]RunID{
@@ -427,6 +453,7 @@ func TestPopulatePossibilities(t *testing.T) {
 						ResourceInfo: ResourceInfo{
 							ID:              1,
 							CostPerLoadUnit: map[uint8]float32{1: 2.0},
+							ResourceType:    1,
 						},
 
 						schedule: map[TimeInterval]RunID{
@@ -438,6 +465,7 @@ func TestPopulatePossibilities(t *testing.T) {
 						ResourceInfo: ResourceInfo{
 							ID:              3,
 							CostPerLoadUnit: map[uint8]float32{1: 1.0},
+							ResourceType:    1,
 						},
 
 						schedule: map[TimeInterval]RunID{
