@@ -5,7 +5,7 @@ import (
 	"slices"
 )
 
-func (loc *Location) findFallbackOption(possibilitiesResp *ResponseGetPossibilities, params *ParamsCanRun) *schedulingOption {
+func (loc *Location) findFallbackOption(possibilitiesResp *ResponseGetPossibilities, params *ParamsCanRun) *SchedulingOption {
 	resourcesByType := make(map[uint8][]*ResourceScheduled)
 	earliestByResource := make(map[*ResourceScheduled]int64)
 	costByResource := make(map[*ResourceScheduled]float32)
@@ -39,7 +39,7 @@ func (loc *Location) findFallbackOption(possibilitiesResp *ResponseGetPossibilit
 	for resourceType, needed := range possibilitiesResp.resourcesNeededPerType {
 		if len(resourcesByType[resourceType]) < int(needed) {
 			// Not enough resources of this type available
-			return &schedulingOption{
+			return &SchedulingOption{
 				WhenCanStart:      params.TimeEnd,
 				SelectedResources: nil,
 				Cost:              0,
@@ -136,14 +136,14 @@ func (loc *Location) findFallbackOption(possibilitiesResp *ResponseGetPossibilit
 	}
 
 	if earliestFallback == _NoAvailability || len(selectedCombination) != totalNeeded {
-		return &schedulingOption{
+		return &SchedulingOption{
 			WhenCanStart:      params.TimeEnd,
 			SelectedResources: nil,
 			Cost:              0,
 		}
 	}
 
-	return &schedulingOption{
+	return &SchedulingOption{
 		WhenCanStart:      earliestFallback,
 		SelectedResources: selectedCombination,
 		Cost:              lowestCost,

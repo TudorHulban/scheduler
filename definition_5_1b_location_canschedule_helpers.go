@@ -1,13 +1,6 @@
 package scheduler
 
-// schedulingOption represents a potential slot for scheduling a task
-type schedulingOption struct {
-	WhenCanStart      int64
-	SelectedResources []*ResourceScheduled
-	Cost              float32
-}
-
-func (loc *Location) findBestSchedulingOption(possibilitiesResp *ResponseGetPossibilities, params *ParamsCanRun) (*schedulingOption, error) {
+func (loc *Location) findBestSchedulingOption(possibilitiesResp *ResponseGetPossibilities, params *ParamsCanRun) (*SchedulingOption, error) {
 	var totalNeeded int
 
 	for _, qty := range possibilitiesResp.resourcesNeededPerType {
@@ -22,7 +15,7 @@ func (loc *Location) findBestSchedulingOption(possibilitiesResp *ResponseGetPoss
 		},
 	)
 
-	result := &schedulingOption{
+	result := &SchedulingOption{
 		WhenCanStart:      earliest,
 		SelectedResources: selectedResources,
 	}
@@ -45,7 +38,11 @@ type paramsScheduleResources struct {
 }
 
 func (loc *Location) scheduleResources(params *paramsScheduleResources) {
+	loc.mu.Lock()
+
 	for _, resource := range params.Resources {
 		resource.schedule[params.TimeInterval] = params.TaskRunID
 	}
+
+	loc.mu.Unlock()
 }
