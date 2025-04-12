@@ -161,7 +161,7 @@ type ParamsRun struct {
 }
 
 func (params *ParamsRun) IsValidDuration() bool {
-	return params.TimeStart >= params.TimeEnd
+	return params.TimeStart <= params.TimeEnd
 }
 
 func (params *ParamsRun) IsValidID() bool {
