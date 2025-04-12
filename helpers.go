@@ -5,7 +5,11 @@ import (
 	"runtime"
 )
 
-func max(a, b int64) int64 {
+type maxIntegerTypes interface {
+	uint8 | uint16 | int64
+}
+
+func max[T maxIntegerTypes](a, b T) T {
 	if a > b {
 		return a
 	}

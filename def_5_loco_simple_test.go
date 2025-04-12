@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoco(t *testing.T) {
+func TestSimpleLoco(t *testing.T) {
 	location := Loco{
 		ID:   1,
 		Name: t.Name(),
@@ -94,8 +94,6 @@ func TestLoco(t *testing.T) {
 
 	options, errGetOptions := location.GetSchedulingOptions(
 		&ParamsCanRun{
-			AllPossibilities: true,
-
 			TimeInterval: TimeInterval{
 				TimeStart: now,
 				TimeEnd:   now + 2*oneHour,

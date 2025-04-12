@@ -53,6 +53,18 @@ func (rpt ResourcesPerTimeInterval) String() string {
 
 type ResourcesPerType map[uint8][]*ResourceScheduled
 
+func (rpt ResourcesPerType) GetResourceTypesSorted() []uint8 {
+	result := make([]uint8, 0)
+
+	for resourceType := range rpt {
+		result = append(result, resourceType)
+	}
+
+	slices.Sort(result)
+
+	return result
+}
+
 func (rpt ResourcesPerType) String() string {
 	var sb strings.Builder
 	sb.WriteString("ResourcesPerType{\n")

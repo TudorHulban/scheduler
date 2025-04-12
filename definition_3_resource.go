@@ -25,6 +25,16 @@ type ResourceInfo struct {
 	ServedQuantity  uint16 // ex. apartment w 2 rooms serves 2, room serves 1
 }
 
+func (r ResourceInfo) String() string {
+	var sb strings.Builder
+
+	sb.WriteString(fmt.Sprintf("ID: %d,", r.ID))
+	sb.WriteString(fmt.Sprintf("Name: %q,", r.Name))
+	sb.WriteString(fmt.Sprintf("ResourceType: %d", r.ResourceType))
+
+	return sb.String()
+}
+
 // ResourceScheduled is mutex protected through Location ops.
 type ResourceScheduled struct {
 	ResourceInfo
@@ -32,35 +42,6 @@ type ResourceScheduled struct {
 	mu sync.RWMutex
 
 	schedule map[TimeInterval]RunID
-}
-
-func (r ResourceScheduled) String() string {
-	var sb strings.Builder
-
-	// sb.WriteString("Resource{\n")
-	sb.WriteString(fmt.Sprintf("ID: %d,", r.ID))
-	sb.WriteString(fmt.Sprintf("Name: %q,", r.Name))
-	sb.WriteString(fmt.Sprintf("ResourceType: %d", r.ResourceType))
-
-	// Schedule map
-	// sb.WriteString("\tSchedule: map[TimeInterval]RunID{\n")
-	// for interval, runID := range r.schedule {
-	// 	sb.WriteString(fmt.Sprintf("\t\t%v: %d,\n", interval, runID))
-	// }
-	// sb.WriteString("\t},\n")
-
-	// Cost map
-	// sb.WriteString("\tCostPerLoadUnit: map[uint8]float32{\n")
-	// for unit, cost := range r.CostPerLoadUnit {
-	// 	sb.WriteString(fmt.Sprintf("\t\t%d: %f,\n", unit, cost))
-	// }
-	// sb.WriteString("\t},\n")
-
-	// Other fields
-
-	// sb.WriteString("}")
-
-	return sb.String()
 }
 
 type ParamsNewResource struct {

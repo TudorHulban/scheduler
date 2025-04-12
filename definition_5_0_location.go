@@ -49,8 +49,10 @@ func NewLocation(params *ParamsNewLocation) (*Location, error) {
 type ParamsCanRun struct {
 	TimeInterval
 
-	TaskRun          *Run
-	AllPossibilities bool
+	TaskRun *Run
+
+	PossibilitiesUpTo uint8
+	AllPossibilities  bool
 }
 
 func (p ParamsCanRun) String() string {
