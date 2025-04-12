@@ -157,12 +157,19 @@ func (res *ResourceScheduled) GetSchedule() string {
 type ParamsRun struct {
 	TimeInterval
 
-	ID RunID
+	ID RunID // ID = 0 reserved for Maintenance.
 }
 
-// ID = 0 reserved for Maintenance.
+func (params *ParamsRun) IsValidDuration() bool {
+	return params.TimeStart >= params.TimeEnd
+}
+
+func (params *ParamsRun) IsValidID() bool {
+	return params.ID > 0
+}
+
 func (res *ResourceScheduled) AddRun(_ context.Context, params *ParamsRun) ([]TimeInterval, error) {
-	if params.TimeStart >= params.TimeEnd {
+	if !params.IsValidDuration() {
 		return nil,
 			goerrors.ErrInvalidInput{
 				Caller:     "AddTask",
@@ -174,7 +181,7 @@ func (res *ResourceScheduled) AddRun(_ context.Context, params *ParamsRun) ([]Ti
 			}
 	}
 
-	if params.ID <= 0 {
+	if !params.IsValidID() {
 		return nil, goerrors.ErrInvalidInput{
 			Caller:     "AddRun",
 			InputName:  "ID",
