@@ -2,6 +2,17 @@ package scheduler
 
 import "sort"
 
+// IsAvailableIn
+func (res *ResourceScheduled) IsAvailableIn(interval *TimeInterval) bool {
+	res.mu.RLock()
+	if _, exists := res.schedule[*interval]; exists {
+		return false
+	}
+	res.mu.RUnlock()
+
+	return true
+}
+
 // GetAvailability returns:
 //   - (nil, true)   = Fully available (no busy intervals or no overlap)
 //   - (slots, false) = Partially available (returns available time slots)
